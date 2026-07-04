@@ -30,7 +30,7 @@ MODELS_DIR.mkdir(exist_ok=True)
 
 INPUT_PATH = PROCESSED_DIR / "horizon_snapshots.parquet"
 
-EARLY_HORIZONS = ["7d", "3d", "2d", "1d"]
+EARLY_HORIZONS = ["early", "3d", "2d", "1d"]
 
 EXCLUDE_COLUMNS = {
     "event_id",
@@ -282,6 +282,11 @@ def main():
 
     for horizon in EARLY_HORIZONS:
         horizon_df = df[df["horizon"] == horizon].copy()
+
+        if horizon_df.empty:
+            print(f"\n=== Horizon: {horizon} ===")
+            print("No rows found for this horizon. Skipping.")
+            continue
 
         train_df = horizon_df[horizon_df["split"] == "train"]
         val_df = horizon_df[horizon_df["split"] == "validation"]

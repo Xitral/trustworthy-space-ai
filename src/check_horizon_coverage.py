@@ -12,7 +12,7 @@ INPUT_PATH = PROCESSED_DIR / "horizon_snapshots.parquet"
 OUTPUT_PATH = RESULTS_DIR / "horizon_coverage.csv"
 
 REQUESTED_HORIZONS = {
-    "7d": 7.0,
+    "early": None,
     "3d": 3.0,
     "2d": 2.0,
     "1d": 1.0,
@@ -56,11 +56,18 @@ def summarize_horizon_coverage(df: pd.DataFrame) -> pd.DataFrame:
 
         valid_time = horizon_df["time_to_tca"].dropna()
 
-        if horizon == "final":
+        if "meets_requested_horizon" in horizon_df.columns:
+            meets_requested = horizon_df["meets_requested_horizon"].astype(bool)
+        elif horizon in {"early", "final"}:
             meets_requested = pd.Series(True, index=horizon_df.index)
-            fallback_rows = pd.Series(False, index=horizon_df.index)
         else:
             meets_requested = horizon_df["time_to_tca"] >= requested_days
+
+        if "is_horizon_fallback" in horizon_df.columns:
+            fallback_rows = horizon_df["is_horizon_fallback"].astype(bool)
+        elif horizon in {"early", "final"}:
+            fallback_rows = pd.Series(False, index=horizon_df.index)
+        else:
             fallback_rows = ~meets_requested
 
         rows.append(
