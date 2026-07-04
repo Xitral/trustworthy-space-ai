@@ -13,6 +13,8 @@ BASELINE_METRICS_PATH = RESULTS_DIR / "baseline_metrics.csv"
 CALIBRATION_METRICS_PATH = RESULTS_DIR / "calibration_metrics.csv"
 QUANTILE_CURVES_PATH = RESULTS_DIR / "calibration_curves_quantile.csv"
 HORIZON_COVERAGE_PATH = RESULTS_DIR / "horizon_coverage.csv"
+UNCERTAINTY_METRICS_PATH = RESULTS_DIR / "uncertainty_metrics.csv"
+UNCERTAINTY_ABSTENTION_PATH = RESULTS_DIR / "uncertainty_abstention.csv"
 
 HORIZON_ORDER = ["early", "3d", "2d", "1d"]
 CALIBRATION_MODEL_ORDER = [
@@ -368,6 +370,236 @@ def plot_quantile_reliability_comparison_1d(quantile_curves: pd.DataFrame) -> No
 
     save_current_figure(FIGURES_DIR / "quantile_reliability_comparison_1d.png")
 
+def prepare_uncertainty_test_df(uncertainty_metrics: pd.DataFrame) -> pd.DataFrame:
+    required = {
+        "model",
+        "horizon",
+        "split",
+        "mean_predictive_std_positive",
+        "mean_predictive_std_negative",
+    }
+    missing = required - set(uncertainty_metrics.columns)
+
+    if missing:
+        raise ValueError(f"Missing required uncertainty metric columns: {missing}")
+
+    df = uncertainty_metrics[
+        (uncertainty_metrics["split"] == "test")
+        & (uncertainty_metrics["horizon"].isin(HORIZON_ORDER))
+    ].copy()
+
+    df["horizon"] = pd.Categorical(
+        df["horizon"],
+        categories=HORIZON_ORDER,
+        ordered=True,
+    )
+
+    df = df.sort_values("horizon")
+
+    return df
+
+
+def plot_uncertainty_positive_vs_negative(uncertainty_metrics: pd.DataFrame) -> None:
+    df = prepare_uncertainty_test_df(uncertainty_metrics)
+
+    x = np.arange(len(df))
+
+    plt.figure(figsize=(9, 5))
+    plt.plot(
+        x,
+        df["mean_predictive_std_positive"],
+        marker="o",
+        label="High-risk events",
+    )
+    plt.plot(
+        x,
+        df["mean_predictive_std_negative"],
+        marker="o",
+        label="Non-high-risk events",
+    )
+
+    plt.xticks(x, df["horizon"])
+    plt.xlabel("Prediction horizon")
+    plt.ylabel("Mean predictive standard deviation")
+    plt.title("Bootstrap uncertainty is concentrated on high-risk events")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+
+    save_current_figure(FIGURES_DIR / "uncertainty_positive_vs_negative.png")
+
+
+def plot_positive_escalation_rate(uncertainty_abstention: pd.DataFrame) -> None:
+    required = {
+        "horizon",
+        "split",
+        "escalated_fraction",
+        "positive_escalation_rate",
+    }
+    missing = required - set(uncertainty_abstention.columns)
+
+    if missing:
+        raise ValueError(f"Missing required abstention columns: {missing}")
+
+    df = uncertainty_abstention[
+        (uncertainty_abstention["split"] == "test")
+        & (uncertainty_abstention["horizon"].isin(HORIZON_ORDER))
+        & (uncertainty_abstention["escalated_fraction"] > 0)
+        & (uncertainty_abstention["escalated_fraction"] <= 0.30)
+    ].copy()
+
+    df["horizon"] = pd.Categorical(
+        df["horizon"],
+        categories=HORIZON_ORDER,
+        ordered=True,
+    )
+
+    df = df.sort_values(["horizon", "escalated_fraction"])
+
+    plt.figure(figsize=(9, 5))
+
+    for horizon in HORIZON_ORDER:
+        horizon_df = df[df["horizon"] == horizon]
+
+        if horizon_df.empty:
+            continue
+
+        plt.plot(
+            horizon_df["escalated_fraction"] * 100,
+            horizon_df["positive_escalation_rate"] * 100,
+            marker="o",
+            label=horizon,
+        )
+
+    plt.xlabel("Most uncertain events escalated, %")
+    plt.ylabel("High-risk events captured, %")
+    plt.title("Uncertainty-based escalation captures high-risk events")
+    plt.ylim(0.0, 105.0)
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+
+    save_current_figure(FIGURES_DIR / "positive_escalation_rate.png")
+
+
+def plot_uncertainty_abstention_coverage(uncertainty_abstention: pd.DataFrame) -> None:
+    required = {
+        "horizon",
+        "split",
+        "coverage_rate",
+        "positive_escalation_rate",
+    }
+    missing = required - set(uncertainty_abstention.columns)
+
+    if missing:
+        raise ValueError(f"Missing required abstention columns: {missing}")
+
+    df = uncertainty_abstention[
+        (uncertainty_abstention["split"] == "test")
+        & (uncertainty_abstention["horizon"].isin(HORIZON_ORDER))
+        & (uncertainty_abstention["coverage_rate"] >= 0.70)
+    ].copy()
+
+    df["horizon"] = pd.Categorical(
+        df["horizon"],
+        categories=HORIZON_ORDER,
+        ordered=True,
+    )
+
+    df = df.sort_values(["horizon", "coverage_rate"], ascending=[True, False])
+
+    plt.figure(figsize=(9, 5))
+
+    for horizon in HORIZON_ORDER:
+        horizon_df = df[df["horizon"] == horizon]
+
+        if horizon_df.empty:
+            continue
+
+        plt.plot(
+            horizon_df["coverage_rate"] * 100,
+            horizon_df["positive_escalation_rate"] * 100,
+            marker="o",
+            label=horizon,
+        )
+
+    plt.xlabel("Automated coverage remaining, %")
+    plt.ylabel("High-risk events escalated, %")
+    plt.title("Coverage tradeoff from uncertainty-based escalation")
+    plt.ylim(0.0, 105.0)
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.gca().invert_xaxis()
+
+    save_current_figure(FIGURES_DIR / "uncertainty_abstention_coverage.png")
+
+
+def write_uncertainty_summary_tables(
+    uncertainty_metrics: pd.DataFrame,
+    uncertainty_abstention: pd.DataFrame,
+) -> None:
+    metrics_test = uncertainty_metrics[
+        (uncertainty_metrics["split"] == "test")
+        & (uncertainty_metrics["horizon"].isin(HORIZON_ORDER))
+    ].copy()
+
+    abstention_test = uncertainty_abstention[
+        (uncertainty_abstention["split"] == "test")
+        & (uncertainty_abstention["horizon"].isin(HORIZON_ORDER))
+    ].copy()
+
+    metrics_test["horizon"] = pd.Categorical(
+        metrics_test["horizon"],
+        categories=HORIZON_ORDER,
+        ordered=True,
+    )
+
+    abstention_test["horizon"] = pd.Categorical(
+        abstention_test["horizon"],
+        categories=HORIZON_ORDER,
+        ordered=True,
+    )
+
+    uncertainty_summary = metrics_test[
+        [
+            "model",
+            "horizon",
+            "positive_rate",
+            "n_bootstrap_models",
+            "mean_predictive_std",
+            "mean_predictive_std_positive",
+            "mean_predictive_std_negative",
+            "roc_auc",
+            "pr_auc",
+            "brier_score",
+            "ece",
+            "precision_top_5",
+            "recall_top_5",
+        ]
+    ].sort_values("horizon")
+
+    abstention_summary = abstention_test[
+        [
+            "model",
+            "horizon",
+            "escalated_fraction",
+            "coverage_rate",
+            "positives_total",
+            "positives_escalated",
+            "positive_escalation_rate",
+            "automated_positive_rate",
+            "pr_auc",
+            "brier_score",
+            "ece",
+        ]
+    ].sort_values(["horizon", "escalated_fraction"])
+
+    uncertainty_summary.to_csv(RESULTS_DIR / "uncertainty_test_summary.csv", index=False)
+    abstention_summary.to_csv(
+        RESULTS_DIR / "uncertainty_abstention_test_summary.csv",
+        index=False,
+    )
+
+    print(f"Wrote {RESULTS_DIR / 'uncertainty_test_summary.csv'}")
+    print(f"Wrote {RESULTS_DIR / 'uncertainty_abstention_test_summary.csv'}")
 
 def write_summary_tables(
     baseline_metrics: pd.DataFrame,
@@ -424,10 +656,14 @@ def main() -> None:
     require_file(BASELINE_METRICS_PATH)
     require_file(CALIBRATION_METRICS_PATH)
     require_file(QUANTILE_CURVES_PATH)
+    require_file(UNCERTAINTY_METRICS_PATH)
+    require_file(UNCERTAINTY_ABSTENTION_PATH)
 
     baseline_metrics = pd.read_csv(BASELINE_METRICS_PATH)
     calibration_metrics = pd.read_csv(CALIBRATION_METRICS_PATH)
     quantile_curves = pd.read_csv(QUANTILE_CURVES_PATH)
+    uncertainty_metrics = pd.read_csv(UNCERTAINTY_METRICS_PATH)
+    uncertainty_abstention = pd.read_csv(UNCERTAINTY_ABSTENTION_PATH)
 
     plot_pr_auc_by_horizon(baseline_metrics)
     plot_top5_recall_by_horizon(baseline_metrics)
@@ -435,6 +671,9 @@ def main() -> None:
     plot_ece_by_horizon(calibration_metrics)
     plot_quantile_reliability_by_horizon(quantile_curves)
     plot_quantile_reliability_comparison_1d(quantile_curves)
+    plot_uncertainty_positive_vs_negative(uncertainty_metrics)
+    plot_positive_escalation_rate(uncertainty_abstention)
+    plot_uncertainty_abstention_coverage(uncertainty_abstention)
 
     if HORIZON_COVERAGE_PATH.exists():
         horizon_coverage = pd.read_csv(HORIZON_COVERAGE_PATH)
@@ -445,6 +684,11 @@ def main() -> None:
     write_summary_tables(
         baseline_metrics=baseline_metrics,
         calibration_metrics=calibration_metrics,
+    )
+
+    write_uncertainty_summary_tables(
+        uncertainty_metrics=uncertainty_metrics,
+        uncertainty_abstention=uncertainty_abstention,
     )
 
 
