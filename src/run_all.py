@@ -1,0 +1,245 @@
+from __future__ import annotations
+
+import argparse
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+DEFAULT_STEPS = [
+    {
+        "name": "Inspect raw data",
+        "script": "src/inspect_data.py",
+        "optional": False,
+    },
+    {
+        "name": "Preprocess horizon snapshots",
+        "script": "src/preprocess.py",
+        "optional": False,
+    },
+    {
+        "name": "Check horizon coverage",
+        "script": "src/check_horizon_coverage.py",
+        "optional": False,
+    },
+    {
+        "name": "Train baseline models",
+        "script": "src/train_models.py",
+        "optional": False,
+    },
+    {
+        "name": "Calibrate models",
+        "script": "src/calibrate_models.py",
+        "optional": False,
+    },
+    {
+        "name": "Run uncertainty experiment",
+        "script": "src/uncertainty.py",
+        "optional": False,
+    },
+    {
+        "name": "Generate figures and summary tables",
+        "script": "src/make_figures.py",
+        "optional": False,
+    },
+]
+
+
+EXPECTED_OUTPUTS = [
+    "data/processed/event_labels.csv",
+    "data/processed/horizon_snapshots.parquet",
+    "results/horizon_coverage.csv",
+    "results/baseline_metrics.csv",
+    "results/calibration_metrics.csv",
+    "results/calibration_curves.csv",
+    "results/calibration_curves_quantile.csv",
+    "results/uncertainty_metrics.csv",
+    "results/uncertainty_abstention.csv",
+    "results/uncertainty_predictions.csv",
+    "results/baseline_test_summary.csv",
+    "results/calibration_test_summary.csv",
+    "results/uncertainty_test_summary.csv",
+    "results/uncertainty_abstention_test_summary.csv",
+    "figures/pr_auc_by_horizon.png",
+    "figures/top5_recall_by_horizon.png",
+    "figures/brier_score_by_horizon.png",
+    "figures/ece_by_horizon.png",
+    "figures/quantile_reliability_by_horizon.png",
+    "figures/quantile_reliability_comparison_1d.png",
+    "figures/horizon_timing.png",
+    "figures/horizon_coverage.png",
+    "figures/uncertainty_positive_vs_negative.png",
+    "figures/positive_escalation_rate.png",
+    "figures/uncertainty_abstention_coverage.png",
+]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run the full BEACON experiment pipeline."
+    )
+
+    parser.add_argument(
+        "--skip-inspect",
+        action="store_true",
+        help="Skip raw data inspection.",
+    )
+
+    parser.add_argument(
+        "--skip-uncertainty",
+        action="store_true",
+        help="Skip bootstrap uncertainty estimation. This also skips uncertainty figures if make_figures requires uncertainty outputs.",
+    )
+
+    parser.add_argument(
+        "--continue-on-error",
+        action="store_true",
+        help="Continue running later steps after a failed step.",
+    )
+
+    return parser.parse_args()
+
+
+def build_steps(args: argparse.Namespace) -> list[dict]:
+    steps = []
+
+    for step in DEFAULT_STEPS:
+        if args.skip_inspect and step["script"] == "src/inspect_data.py":
+            continue
+
+        if args.skip_uncertainty and step["script"] == "src/uncertainty.py":
+            continue
+
+        steps.append(step)
+
+    return steps
+
+
+def ensure_script_exists(script_path: str) -> None:
+    path = REPO_ROOT / script_path
+
+    if not path.exists():
+        raise FileNotFoundError(f"Missing required script: {script_path}")
+
+
+def run_step(step: dict) -> bool:
+    name = step["name"]
+    script = step["script"]
+
+    ensure_script_exists(script)
+
+    command = [sys.executable, "-u", script]
+
+    env = os.environ.copy()
+
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    src_path = str(REPO_ROOT / "src")
+
+    if existing_pythonpath:
+        env["PYTHONPATH"] = f"{src_path}{os.pathsep}{existing_pythonpath}"
+    else:
+        env["PYTHONPATH"] = src_path
+
+    print("\n" + "=" * 80)
+    print(f"Running: {name}")
+    print(f"Command: {' '.join(command)}")
+    print("=" * 80)
+
+    start_time = time.perf_counter()
+
+    result = subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+    )
+
+    elapsed = time.perf_counter() - start_time
+
+    if result.returncode == 0:
+        print(f"\nFinished: {name} in {elapsed:.1f} seconds")
+        return True
+
+    print(f"\nFailed: {name}")
+    print(f"Exit code: {result.returncode}")
+    print(f"Elapsed: {elapsed:.1f} seconds")
+
+    return False
+
+
+def print_output_summary() -> None:
+    print("\n" + "=" * 80)
+    print("Pipeline output summary")
+    print("=" * 80)
+
+    found = []
+    missing = []
+
+    for output in EXPECTED_OUTPUTS:
+        path = REPO_ROOT / output
+
+        if path.exists():
+            found.append(output)
+        else:
+            missing.append(output)
+
+    print("\nFound outputs:")
+    for output in found:
+        print(f"  ✓ {output}")
+
+    if missing:
+        print("\nMissing outputs:")
+        for output in missing:
+            print(f"  - {output}")
+    else:
+        print("\nAll expected outputs were found.")
+
+
+def main() -> None:
+    args = parse_args()
+    steps = build_steps(args)
+
+    print("BEACON full experiment pipeline")
+    print(f"Repository root: {REPO_ROOT}")
+    print(f"Python executable: {sys.executable}")
+
+    failed_steps = []
+
+    pipeline_start = time.perf_counter()
+
+    for step in steps:
+        success = run_step(step)
+
+        if not success:
+            failed_steps.append(step["name"])
+
+            if not args.continue_on_error:
+                print("\nStopping pipeline because a step failed.")
+                print("Use --continue-on-error to run later steps anyway.")
+                print_output_summary()
+                sys.exit(1)
+
+    total_elapsed = time.perf_counter() - pipeline_start
+
+    print("\n" + "=" * 80)
+
+    if failed_steps:
+        print("Pipeline finished with failed steps:")
+        for step_name in failed_steps:
+            print(f"  - {step_name}")
+        print(f"Total elapsed time: {total_elapsed:.1f} seconds")
+        print_output_summary()
+        sys.exit(1)
+
+    print("Pipeline completed successfully.")
+    print(f"Total elapsed time: {total_elapsed:.1f} seconds")
+
+    print_output_summary()
+
+
+if __name__ == "__main__":
+    main()
