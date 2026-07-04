@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import warnings
 
+from joblib import Parallel, delayed
 import numpy as np
 import pandas as pd
 
@@ -37,6 +39,7 @@ DEFAULT_N_SPLITS = 20
 DEFAULT_N_BOOTSTRAPS = 10
 DEFAULT_START_SEED = 42
 DEFAULT_MAX_ITER = 150
+DEFAULT_N_JOBS = max(1, min(4, (os.cpu_count() or 2) - 1))
 ESCALATION_FRACTIONS = [0.05, 0.10, 0.20, 0.30]
 
 EXTRA_EXCLUDE_COLUMNS = {
@@ -97,6 +100,16 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_MAX_ITER,
         help="HistGradientBoosting max_iter for repeated-split models.",
+    )
+
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=DEFAULT_N_JOBS,
+        help=(
+            "Parallel split workers. Use 1 for serial execution, -1 for all cores, "
+            "or a positive number such as 4 or 6."
+        ),
     )
 
     parser.add_argument(
@@ -276,6 +289,141 @@ def positive_escalation_row(
     }
 
 
+def run_split(
+    split_index: int,
+    split_seed: int,
+    n_splits: int,
+    df: pd.DataFrame,
+    feature_cols: list[str],
+    n_bootstraps: int,
+    max_iter: int,
+    skip_uncertainty: bool,
+) -> tuple[list[dict], list[dict]]:
+    metrics_rows = []
+    escalation_rows = []
+
+    print("\n" + "=" * 80)
+    print(f"Repeated split {split_index}/{n_splits} with seed {split_seed}")
+    print("=" * 80)
+
+    split_df = make_event_splits(df, random_state=split_seed)
+
+    for horizon_index, horizon in enumerate(EARLY_HORIZONS):
+        horizon_df = split_df[split_df["horizon"] == horizon].copy()
+
+        if horizon_df.empty:
+            print(f"Skipping empty horizon {horizon}.")
+            continue
+
+        train_df = horizon_df[horizon_df["split"] == "train"]
+        test_df = horizon_df[horizon_df["split"] == "test"]
+
+        y_train = train_df["high_risk"].astype(int).to_numpy()
+        y_test = test_df["high_risk"].astype(int).to_numpy()
+
+        print(
+            f"{horizon}: train={len(train_df):,}, test={len(test_df):,}, "
+            f"test positives={int(y_test.sum())}"
+        )
+
+        if len(np.unique(y_train)) < 2:
+            print("Training split has one class. Skipping horizon.")
+            continue
+
+        current_prob = current_risk_probability(test_df)
+        add_metric_row(
+            rows=metrics_rows,
+            split_seed=split_seed,
+            model_name="current_risk_baseline",
+            horizon=horizon,
+            test_df=test_df,
+            y_prob=current_prob,
+        )
+
+        model_seed = split_seed + horizon_index * 1000
+        gb_model = build_gradient_boosting_model(
+            random_state=model_seed,
+            max_iter=max_iter,
+        )
+        gb_model.fit(train_df[feature_cols], y_train)
+        gb_prob = gb_model.predict_proba(test_df[feature_cols])[:, 1]
+
+        add_metric_row(
+            rows=metrics_rows,
+            split_seed=split_seed,
+            model_name="gradient_boosting",
+            horizon=horizon,
+            test_df=test_df,
+            y_prob=gb_prob,
+        )
+
+        rng = np.random.default_rng(split_seed + horizon_index * 10_000)
+        random_scores = rng.random(len(test_df))
+
+        for fraction in ESCALATION_FRACTIONS:
+            escalation_rows.append(
+                positive_escalation_row(
+                    split_seed=split_seed,
+                    horizon=horizon,
+                    policy="random_escalation",
+                    fraction=fraction,
+                    y_true=y_test,
+                    score=random_scores,
+                )
+            )
+
+            escalation_rows.append(
+                positive_escalation_row(
+                    split_seed=split_seed,
+                    horizon=horizon,
+                    policy="current_risk_escalation",
+                    fraction=fraction,
+                    y_true=y_test,
+                    score=current_prob,
+                )
+            )
+
+        if skip_uncertainty:
+            continue
+
+        bootstrap_seed = split_seed + horizon_index * 100_000
+        bootstrap_models = fit_bootstrap_ensemble(
+            train_df=train_df,
+            feature_cols=feature_cols,
+            n_bootstraps=n_bootstraps,
+            random_seed=bootstrap_seed,
+            max_iter=max_iter,
+        )
+
+        ensemble_mean_prob, ensemble_std_prob = ensemble_predict(
+            bootstrap_models,
+            test_df[feature_cols],
+        )
+
+        add_metric_row(
+            rows=metrics_rows,
+            split_seed=split_seed,
+            model_name="bootstrap_gradient_boosting_ensemble",
+            horizon=horizon,
+            test_df=test_df,
+            y_prob=ensemble_mean_prob,
+        )
+
+        for fraction in ESCALATION_FRACTIONS:
+            escalation_rows.append(
+                positive_escalation_row(
+                    split_seed=split_seed,
+                    horizon=horizon,
+                    policy="bootstrap_uncertainty_escalation",
+                    fraction=fraction,
+                    y_true=y_test,
+                    score=ensemble_std_prob,
+                )
+            )
+
+    return metrics_rows, escalation_rows
+
+
 def summarize_metric_rows(metrics_df: pd.DataFrame) -> pd.DataFrame:
     summary = (
         metrics_df.groupby(["model", "horizon", "split"])[SUMMARY_METRICS]
@@ -370,130 +518,54 @@ def main() -> None:
     for col in feature_cols:
         print(f"- {col}")
 
+    split_seeds = [args.start_seed + i for i in range(args.n_splits)]
+
+    print("\nRepeated split configuration:")
+    print(f"- splits: {args.n_splits}")
+    print(f"- bootstraps per split/horizon: {args.n_bootstraps}")
+    print(f"- max_iter: {args.max_iter}")
+    print(f"- n_jobs: {args.n_jobs}")
+    print(f"- skip_uncertainty: {args.skip_uncertainty}")
+
+    if args.n_jobs == 1:
+        results = [
+            run_split(
+                split_index=split_index,
+                split_seed=split_seed,
+                n_splits=args.n_splits,
+                df=df,
+                feature_cols=feature_cols,
+                n_bootstraps=args.n_bootstraps,
+                max_iter=args.max_iter,
+                skip_uncertainty=args.skip_uncertainty,
+            )
+            for split_index, split_seed in enumerate(split_seeds, start=1)
+        ]
+    else:
+        results = Parallel(
+            n_jobs=args.n_jobs,
+            backend="loky",
+            verbose=10,
+        )(
+            delayed(run_split)(
+                split_index=split_index,
+                split_seed=split_seed,
+                n_splits=args.n_splits,
+                df=df,
+                feature_cols=feature_cols,
+                n_bootstraps=args.n_bootstraps,
+                max_iter=args.max_iter,
+                skip_uncertainty=args.skip_uncertainty,
+            )
+            for split_index, split_seed in enumerate(split_seeds, start=1)
+        )
+
     metrics_rows = []
     escalation_rows = []
 
-    split_seeds = [args.start_seed + i for i in range(args.n_splits)]
-
-    for split_index, split_seed in enumerate(split_seeds, start=1):
-        print("\n" + "=" * 80)
-        print(f"Repeated split {split_index}/{args.n_splits} with seed {split_seed}")
-        print("=" * 80)
-
-        split_df = make_event_splits(df, random_state=split_seed)
-
-        for horizon_index, horizon in enumerate(EARLY_HORIZONS):
-            horizon_df = split_df[split_df["horizon"] == horizon].copy()
-
-            if horizon_df.empty:
-                print(f"Skipping empty horizon {horizon}.")
-                continue
-
-            train_df = horizon_df[horizon_df["split"] == "train"]
-            test_df = horizon_df[horizon_df["split"] == "test"]
-
-            y_train = train_df["high_risk"].astype(int).to_numpy()
-            y_test = test_df["high_risk"].astype(int).to_numpy()
-
-            print(
-                f"{horizon}: train={len(train_df):,}, test={len(test_df):,}, "
-                f"test positives={int(y_test.sum())}"
-            )
-
-            if len(np.unique(y_train)) < 2:
-                print("Training split has one class. Skipping horizon.")
-                continue
-
-            current_prob = current_risk_probability(test_df)
-            add_metric_row(
-                rows=metrics_rows,
-                split_seed=split_seed,
-                model_name="current_risk_baseline",
-                horizon=horizon,
-                test_df=test_df,
-                y_prob=current_prob,
-            )
-
-            model_seed = split_seed + horizon_index * 1000
-            gb_model = build_gradient_boosting_model(
-                random_state=model_seed,
-                max_iter=args.max_iter,
-            )
-            gb_model.fit(train_df[feature_cols], y_train)
-            gb_prob = gb_model.predict_proba(test_df[feature_cols])[:, 1]
-
-            add_metric_row(
-                rows=metrics_rows,
-                split_seed=split_seed,
-                model_name="gradient_boosting",
-                horizon=horizon,
-                test_df=test_df,
-                y_prob=gb_prob,
-            )
-
-            rng = np.random.default_rng(split_seed + horizon_index * 10_000)
-            random_scores = rng.random(len(test_df))
-
-            for fraction in ESCALATION_FRACTIONS:
-                escalation_rows.append(
-                    positive_escalation_row(
-                        split_seed=split_seed,
-                        horizon=horizon,
-                        policy="random_escalation",
-                        fraction=fraction,
-                        y_true=y_test,
-                        score=random_scores,
-                    )
-                )
-
-                escalation_rows.append(
-                    positive_escalation_row(
-                        split_seed=split_seed,
-                        horizon=horizon,
-                        policy="current_risk_escalation",
-                        fraction=fraction,
-                        y_true=y_test,
-                        score=current_prob,
-                    )
-                )
-
-            if args.skip_uncertainty:
-                continue
-
-            bootstrap_seed = split_seed + horizon_index * 100_000
-            bootstrap_models = fit_bootstrap_ensemble(
-                train_df=train_df,
-                feature_cols=feature_cols,
-                n_bootstraps=args.n_bootstraps,
-                random_seed=bootstrap_seed,
-                max_iter=args.max_iter,
-            )
-
-            ensemble_mean_prob, ensemble_std_prob = ensemble_predict(
-                bootstrap_models,
-                test_df[feature_cols],
-            )
-
-            add_metric_row(
-                rows=metrics_rows,
-                split_seed=split_seed,
-                model_name="bootstrap_gradient_boosting_ensemble",
-                horizon=horizon,
-                test_df=test_df,
-                y_prob=ensemble_mean_prob,
-            )
-
-            for fraction in ESCALATION_FRACTIONS:
-                escalation_rows.append(
-                    positive_escalation_row(
-                        split_seed=split_seed,
-                        horizon=horizon,
-                        policy="bootstrap_uncertainty_escalation",
-                        fraction=fraction,
-                        y_true=y_test,
-                        score=ensemble_std_prob,
-                    )
-                )
+    for split_metric_rows, split_escalation_rows in results:
+        metrics_rows.extend(split_metric_rows)
+        escalation_rows.extend(split_escalation_rows)
 
     metrics_df = pd.DataFrame(metrics_rows)
     escalation_df = pd.DataFrame(escalation_rows)
@@ -524,7 +596,10 @@ def main() -> None:
             escalation_summary_df[
                 escalation_summary_df["escalated_fraction"].isin([0.10, 0.20, 0.30])
             ]
-            .sort_values(["horizon", "escalated_fraction", "positive_escalation_rate_mean"], ascending=[True, True, False])
+            .sort_values(
+                ["horizon", "escalated_fraction", "positive_escalation_rate_mean"],
+                ascending=[True, True, False],
+            )
             .to_string(index=False)
         )
 
