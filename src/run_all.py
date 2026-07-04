@@ -47,6 +47,11 @@ DEFAULT_STEPS = [
         "optional": False,
     },
     {
+        "name": "Run repeated split robustness evaluation",
+        "script": "src/repeated_splits.py",
+        "optional": False,
+    },
+    {
         "name": "Generate figures and summary tables",
         "script": "src/make_figures.py",
         "optional": False,
@@ -54,7 +59,7 @@ DEFAULT_STEPS = [
 ]
 
 
-EXPECTED_OUTPUTS = [
+CORE_EXPECTED_OUTPUTS = [
     "data/processed/event_labels.csv",
     "data/processed/horizon_snapshots.parquet",
     "results/horizon_coverage.csv",
@@ -62,13 +67,28 @@ EXPECTED_OUTPUTS = [
     "results/calibration_metrics.csv",
     "results/calibration_curves.csv",
     "results/calibration_curves_quantile.csv",
+    "results/bayesian_logistic_metrics.csv",
+    "results/bayesian_logistic_predictions.csv",
+    "results/baseline_test_summary.csv",
+    "results/calibration_test_summary.csv",
+]
+
+UNCERTAINTY_EXPECTED_OUTPUTS = [
     "results/uncertainty_metrics.csv",
     "results/uncertainty_abstention.csv",
     "results/uncertainty_predictions.csv",
-    "results/baseline_test_summary.csv",
-    "results/calibration_test_summary.csv",
     "results/uncertainty_test_summary.csv",
     "results/uncertainty_abstention_test_summary.csv",
+]
+
+REPEATED_SPLIT_EXPECTED_OUTPUTS = [
+    "results/repeated_split_metrics.csv",
+    "results/repeated_split_summary.csv",
+    "results/repeated_split_escalation.csv",
+    "results/repeated_split_escalation_summary.csv",
+]
+
+FIGURE_EXPECTED_OUTPUTS = [
     "figures/pr_auc_by_horizon.png",
     "figures/top5_recall_by_horizon.png",
     "figures/brier_score_by_horizon.png",
@@ -97,7 +117,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-uncertainty",
         action="store_true",
-        help="Skip bootstrap uncertainty estimation. This also skips uncertainty figures if make_figures requires uncertainty outputs.",
+        help="Skip bootstrap uncertainty estimation.",
+    )
+
+    parser.add_argument(
+        "--skip-repeated-splits",
+        action="store_true",
+        help="Skip repeated event-level split robustness evaluation.",
     )
 
     parser.add_argument(
@@ -119,9 +145,27 @@ def build_steps(args: argparse.Namespace) -> list[dict]:
         if args.skip_uncertainty and step["script"] == "src/uncertainty.py":
             continue
 
+        if args.skip_repeated_splits and step["script"] == "src/repeated_splits.py":
+            continue
+
         steps.append(step)
 
     return steps
+
+
+def expected_outputs(args: argparse.Namespace) -> list[str]:
+    outputs = []
+    outputs.extend(CORE_EXPECTED_OUTPUTS)
+
+    if not args.skip_uncertainty:
+        outputs.extend(UNCERTAINTY_EXPECTED_OUTPUTS)
+
+    if not args.skip_repeated_splits:
+        outputs.extend(REPEATED_SPLIT_EXPECTED_OUTPUTS)
+
+    outputs.extend(FIGURE_EXPECTED_OUTPUTS)
+
+    return outputs
 
 
 def ensure_script_exists(script_path: str) -> None:
@@ -176,7 +220,7 @@ def run_step(step: dict) -> bool:
     return False
 
 
-def print_output_summary() -> None:
+def print_output_summary(args: argparse.Namespace) -> None:
     print("\n" + "=" * 80)
     print("Pipeline output summary")
     print("=" * 80)
@@ -184,7 +228,7 @@ def print_output_summary() -> None:
     found = []
     missing = []
 
-    for output in EXPECTED_OUTPUTS:
+    for output in expected_outputs(args):
         path = REPO_ROOT / output
 
         if path.exists():
@@ -225,7 +269,7 @@ def main() -> None:
             if not args.continue_on_error:
                 print("\nStopping pipeline because a step failed.")
                 print("Use --continue-on-error to run later steps anyway.")
-                print_output_summary()
+                print_output_summary(args)
                 sys.exit(1)
 
     total_elapsed = time.perf_counter() - pipeline_start
@@ -237,13 +281,13 @@ def main() -> None:
         for step_name in failed_steps:
             print(f"  - {step_name}")
         print(f"Total elapsed time: {total_elapsed:.1f} seconds")
-        print_output_summary()
+        print_output_summary(args)
         sys.exit(1)
 
     print("Pipeline completed successfully.")
     print(f"Total elapsed time: {total_elapsed:.1f} seconds")
 
-    print_output_summary()
+    print_output_summary(args)
 
 
 if __name__ == "__main__":
