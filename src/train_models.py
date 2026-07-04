@@ -124,7 +124,7 @@ def evaluate_predictions(y_true, y_prob):
     return metrics
 
 
-def make_event_splits(df):
+def make_event_splits(df, random_state: int = 42):
     event_labels = (
         df[["event_id", "high_risk"]]
         .drop_duplicates("event_id")
@@ -136,7 +136,7 @@ def make_event_splits(df):
     train_events, temp_events = train_test_split(
         event_labels,
         test_size=0.30,
-        random_state=42,
+        random_state=random_state,
         stratify=stratify if stratify.nunique() == 2 else None,
     )
 
@@ -145,7 +145,7 @@ def make_event_splits(df):
     val_events, test_events = train_test_split(
         temp_events,
         test_size=0.50,
-        random_state=42,
+        random_state=random_state,
         stratify=temp_stratify if temp_stratify.nunique() == 2 else None,
     )
 
