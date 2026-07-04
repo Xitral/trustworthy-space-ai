@@ -38,6 +38,12 @@ EXCLUDE_COLUMNS = {
     "high_risk",
     "final_risk",
     "final_collision_risk",
+    "final_time_to_tca",
+
+    # Diagnostic metadata, not real CDM prediction features.
+    "requested_horizon_days",
+    "meets_requested_horizon",
+    "is_horizon_fallback",
 }
 
 
