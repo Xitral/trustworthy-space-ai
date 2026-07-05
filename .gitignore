@@ -40,8 +40,10 @@ data/processed/*
 # Generated outputs
 results/*
 figures/*
+viewer/data/*.json
 !results/.gitkeep
 !figures/.gitkeep
+!viewer/data/.gitkeep
 
 # Final paper figures kept in version control for GitHub rendering
 !figures/pr_auc_by_horizon.png
