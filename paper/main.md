@@ -141,6 +141,8 @@ Across 20 repeated event-level splits, learned models improve PR-AUC over the cu
 | `3d` | gradient boosting | 0.493 +/- 0.090 | 0.237 +/- 0.048 |
 | `early` | gradient boosting | 0.233 +/- 0.082 | 0.109 +/- 0.031 |
 
+![Repeated split PR-AUC robustness](../figures/repeated_split_pr_auc.png)
+
 ![PR-AUC by prediction horizon](../figures/pr_auc_by_horizon.png)
 
 The current-risk baseline remains strong, which is expected. The CDM risk estimate is already a meaningful domain signal. However, the repeated split results show that learned models add ranking value beyond direct current-risk ranking, especially at 1-day, 2-day, and 3-day horizons.
@@ -148,6 +150,8 @@ The current-risk baseline remains strong, which is expected. The CDM risk estima
 ### 7.2 Top-K triage
 
 Top-K recall measures how many high-risk events are captured when reviewing only the highest-ranked events. This is especially relevant for operational triage, where human attention is limited.
+
+![Repeated split top 5% recall robustness](../figures/repeated_split_top5_recall.png)
 
 ![Top 5% recall by prediction horizon](../figures/top5_recall_by_horizon.png)
 
@@ -189,6 +193,8 @@ Across 20 repeated event-level splits, uncertainty-based escalation substantiall
 | `2d` | 96.3% +/- 4.3% | 97.9% +/- 3.7% | 9.6% +/- 7.8% |
 | `3d` | 97.5% +/- 3.9% | 97.9% +/- 3.7% | 11.3% +/- 10.2% |
 | `early` | 80.8% +/- 9.8% | 84.6% +/- 7.8% | 8.3% +/- 6.6% |
+
+![Repeated split 10% escalation robustness](../figures/repeated_split_escalation_10pct.png)
 
 The coverage tradeoff shows how many high-risk events are escalated as the automated coverage rate decreases.
 
