@@ -11,7 +11,10 @@ doi: "10.5281/zenodo.21209120"
 identifiers:
   - type: doi
     value: "10.5281/zenodo.21209120"
-    description: "Zenodo DOI for the BEACON v0.2.1 archived software artifact"
+    description: "Zenodo version DOI for the BEACON v0.2.1 archived software artifact"
+  - type: doi
+    value: "10.5281/zenodo.21209119"
+    description: "Zenodo concept DOI for the BEACON archive across versions"
 version: "0.2.1"
 date-released: "2026-07-05"
 license: MIT
