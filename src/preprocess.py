@@ -6,7 +6,9 @@ import pandas as pd
 
 RAW_DIR = Path("data/raw")
 PROCESSED_DIR = Path("data/processed")
+RESULTS_DIR = Path("results")
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # "early" means earliest available CDM for the event.
 # Requested horizons choose the closest available CDM at or before that many days before TCA.
@@ -22,9 +24,11 @@ HORIZONS = {
 # ESA risk is log10(probability), so -5 means 10^-5.
 HIGH_RISK_THRESHOLD_LOG10 = -5.0
 
+POST_TCA_DIAGNOSTICS_PATH = RESULTS_DIR / "horizon_post_tca_diagnostics.csv"
+
 
 def find_file(name_part: str) -> Path:
-    matches = list(RAW_DIR.glob(f"*{name_part}*"))
+    matches = sorted(RAW_DIR.glob(f"*{name_part}*"))
 
     if not matches:
         raise FileNotFoundError(f"No file containing '{name_part}' found in {RAW_DIR}")
@@ -71,6 +75,10 @@ def prefer_pre_tca_rows(event_df: pd.DataFrame) -> pd.DataFrame:
         return pre_tca
 
     return event_df.copy()
+
+
+def event_has_pre_tca_row(event_df: pd.DataFrame) -> bool:
+    return bool((event_df["time_to_tca"] >= 0).any())
 
 
 def select_final_row(event_df: pd.DataFrame) -> pd.Series:
@@ -136,6 +144,7 @@ def get_final_event_risk(train: pd.DataFrame) -> pd.DataFrame:
                 "event_id": str(event_id),
                 "final_risk": final_row["risk"],
                 "final_time_to_tca": final_row["time_to_tca"],
+                "final_row_is_post_tca": bool(final_row["time_to_tca"] < 0),
             }
         )
 
@@ -155,6 +164,8 @@ def build_horizon_snapshots(
     rows = []
 
     for event_id, event_df in train.groupby("event_id"):
+        has_pre_tca = event_has_pre_tca_row(event_df)
+
         for horizon_name, requested_days in HORIZONS.items():
             selected_row, meets_requested, is_fallback = select_horizon_row(
                 event_df=event_df,
@@ -170,6 +181,8 @@ def build_horizon_snapshots(
             )
             row["meets_requested_horizon"] = bool(meets_requested)
             row["is_horizon_fallback"] = bool(is_fallback)
+            row["event_has_pre_tca_row"] = bool(has_pre_tca)
+            row["selected_row_is_post_tca"] = bool(row["time_to_tca"] < 0)
 
             rows.append(row)
 
@@ -177,6 +190,32 @@ def build_horizon_snapshots(
     snapshots = snapshots.merge(final_risk, on="event_id", how="left")
 
     return snapshots
+
+
+def build_post_tca_diagnostics(snapshots: pd.DataFrame) -> pd.DataFrame:
+    diagnostics = (
+        snapshots.groupby("horizon")
+        .agg(
+            rows=("event_id", "count"),
+            unique_events=("event_id", "nunique"),
+            post_tca_rows=("selected_row_is_post_tca", "sum"),
+            fallback_rows=("is_horizon_fallback", "sum"),
+            events_without_pre_tca=("event_has_pre_tca_row", lambda x: int((~x).sum())),
+            min_time_to_tca=("time_to_tca", "min"),
+            median_time_to_tca=("time_to_tca", "median"),
+            max_time_to_tca=("time_to_tca", "max"),
+        )
+        .reset_index()
+    )
+
+    diagnostics["percent_post_tca_rows"] = (
+        diagnostics["post_tca_rows"] / diagnostics["rows"] * 100.0
+    )
+    diagnostics["percent_events_without_pre_tca"] = (
+        diagnostics["events_without_pre_tca"] / diagnostics["rows"] * 100.0
+    )
+
+    return diagnostics
 
 
 def print_horizon_summary(snapshots: pd.DataFrame) -> None:
@@ -221,19 +260,25 @@ def main() -> None:
 
     final_risk = get_final_event_risk(train)
     snapshots = build_horizon_snapshots(train, final_risk)
+    post_tca_diagnostics = build_post_tca_diagnostics(snapshots)
 
     final_risk.to_csv(PROCESSED_DIR / "event_labels.csv", index=False)
     snapshots.to_parquet(PROCESSED_DIR / "horizon_snapshots.parquet", index=False)
+    post_tca_diagnostics.to_csv(POST_TCA_DIAGNOSTICS_PATH, index=False)
 
     print("\nWrote:")
     print(PROCESSED_DIR / "event_labels.csv")
     print(PROCESSED_DIR / "horizon_snapshots.parquet")
+    print(POST_TCA_DIAGNOSTICS_PATH)
 
     print("\nEvent label summary:")
     print(final_risk["high_risk"].value_counts(normalize=True).rename("rate"))
     print(final_risk["high_risk"].value_counts().rename("count"))
 
     print_horizon_summary(snapshots)
+
+    print("\nPost-TCA selected-row diagnostics:")
+    print(post_tca_diagnostics.to_string(index=False))
 
 
 if __name__ == "__main__":
