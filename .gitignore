@@ -60,6 +60,8 @@ figures/*
 !figures/repeated_split_pr_auc.png
 !figures/repeated_split_top5_recall.png
 !figures/repeated_split_escalation_10pct.png
+!figures/risk_ablation_pr_auc.png
+!figures/risk_ablation_top5_recall.png
 
 # Paper build files
 paper/*.aux
