@@ -2,9 +2,8 @@
 //
 // app.js owns the viewer state and scene entities. This companion script replaces
 // the trail renderer with one that projects the live moving object position onto
-// the current interpolated orbit path every frame. It then rebuilds the trail
-// entities so Cesium cannot keep displaying stale polyline geometry while the
-// prediction-horizon interpolation is in progress.
+// the current interpolated orbit path every frame. It also hooks renderSnapshot
+// directly so the trails are corrected immediately after the dots move.
 
 (function patchLiveOrbitTrails() {
   function squaredDistance(a, b) {
@@ -117,5 +116,42 @@
     }
   }
 
+  function syncLiveTrails(snapshot) {
+    if (!snapshot || !snapshot.geometry) return;
+    const geometry = snapshot.geometry;
+
+    updateLiveTrailSegments(
+      geometry.target_orbit_km,
+      geometry._target_path_progress ?? closestPathIndex(geometry.target_orbit_km, geometry.target_position_km),
+      geometry.target_position_km,
+      "targetTrailSegments",
+      TARGET_COLOR,
+    );
+    updateLiveTrailSegments(
+      geometry.secondary_orbit_km,
+      geometry._secondary_path_progress ?? closestPathIndex(geometry.secondary_orbit_km, geometry.secondary_position_km),
+      geometry.secondary_position_km,
+      "secondaryTrailSegments",
+      SECONDARY_COLOR,
+    );
+
+    viewer.scene.requestRender();
+  }
+
   updateTrailSegments = updateLiveTrailSegments;
+
+  // Belt-and-suspenders: make sure every animation frame corrects the trail after
+  // app.js moves the dots. This avoids the old static path staying visible during
+  // prediction-horizon interpolation on some Cesium/browser combinations.
+  const originalRenderSnapshot = renderSnapshot;
+  renderSnapshot = function patchedRenderSnapshot(snapshot, track = false) {
+    originalRenderSnapshot(snapshot, track);
+    syncLiveTrails(snapshot);
+  };
+
+  viewer.scene.preRender.addEventListener(() => {
+    syncLiveTrails(state.displaySnapshot);
+  });
+
+  window.__BEACON_LIVE_TRAILS_PATCHED__ = true;
 })();
