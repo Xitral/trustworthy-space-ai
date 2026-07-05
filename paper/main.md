@@ -62,6 +62,8 @@ A horizon coverage diagnostic is included because not every event contains obser
 
 The original plan included a 7-day horizon, but the dataset did not contain valid 7-day snapshots for the events in this split. Instead, BEACON reports an `early` horizon, defined as the earliest available CDM for each event. This is more honest than labeling the earliest available observations as true 7-day predictions.
 
+Preprocessing prefers pre-TCA observations for all horizon snapshots and final label construction. If an event has no pre-TCA observations, the pipeline falls back to an available row and records the selected-row status in `results/horizon_post_tca_diagnostics.csv`. This makes post-TCA fallback behavior explicit rather than silently mixing it into the results.
+
 ## 5. Methods
 
 ### 5.1 Event-level splitting
@@ -70,7 +72,7 @@ Train, validation, and test splits are performed by `event_id`, not by individua
 
 This design rule is critical because each event may have multiple CDM observations. If rows from the same event appeared in both training and test sets, the model could appear to perform well by recognizing event-specific information rather than learning generalizable risk structure.
 
-### 5.2 Baselines
+### 5.2 Baselines and learned models
 
 The study compares four baseline approaches:
 
@@ -79,7 +81,11 @@ The study compares four baseline approaches:
 - random forest
 - gradient boosting
 
-The **current-risk baseline** ranks events directly by the CDM-provided current risk estimate. This is an important baseline because the existing risk value is already highly informative. A learned model is only useful if it improves over simply sorting events by current estimated risk.
+The **current-risk baseline** ranks events directly by the CDM-provided current risk estimate. This is an important baseline because the existing risk value is already highly informative.
+
+Learned models are allowed to use the current CDM `risk` feature along with the other numeric CDM/context features. Therefore, the intended comparison is not “machine learning without risk versus current risk.” The intended comparison is whether a learned model can improve triage over direct current-risk ranking by combining current risk with additional features.
+
+Final-risk label metadata, including `final_risk` and `final_time_to_tca`, is excluded from model features to avoid label leakage.
 
 ### 5.3 Calibration
 
@@ -239,6 +245,8 @@ Key limitations include:
 - The system has not been validated in an operational environment.
 - Bootstrap uncertainty is Bayesian-inspired, not fully Bayesian.
 - The high-risk threshold is a research definition and not an operational decision rule.
+- Learned models include the current CDM risk feature, so results should be interpreted as improvement over direct current-risk ranking, not as risk-free prediction.
+- Events without pre-TCA observations require fallback handling and are tracked through diagnostics.
 - The figures and metrics should be interpreted as preliminary evidence, not deployment-ready validation.
 
 Because each test horizon contains only a small number of high-risk events, strong-looking recall results should still be interpreted cautiously. Repeating the evaluation across 20 event-level splits reduces single-split sensitivity, but it does not replace external validation on independent conjunction assessment data.
