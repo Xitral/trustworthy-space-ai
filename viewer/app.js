@@ -114,6 +114,10 @@ function kmToCartesian(point) {
   return new Cesium.Cartesian3(point[0] * 1000, point[1] * 1000, point[2] * 1000);
 }
 
+function cartesianMidpoint(a, b) {
+  return Cesium.Cartesian3.lerp(a, b, 0.5, new Cesium.Cartesian3());
+}
+
 function pathToCartesian(points) {
   return points.map(kmToCartesian);
 }
@@ -128,6 +132,14 @@ function formatNumber(value, digits = 3) {
 function formatPercent(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
   return `${(Number(value) * 100).toFixed(2)}%`;
+}
+
+function isFiniteNumber(value) {
+  return value !== null && value !== undefined && Number.isFinite(Number(value));
+}
+
+function metricValue(value, className = "") {
+  return `<span class="value ${className}">${value}</span>`;
 }
 
 function riskColor(snapshot) {
@@ -170,14 +182,98 @@ function lerpPoint(a, b, t) {
   return a.map((value, index) => lerp(value, b[index], t));
 }
 
+function distanceSquared(a, b) {
+  return a.reduce((total, value, index) => total + (value - b[index]) ** 2, 0);
+}
+
+function isClosedPath(path) {
+  return Array.isArray(path) && path.length > 2 && distanceSquared(path[0], path[path.length - 1]) < 1e-6;
+}
+
+function effectivePathLength(path) {
+  if (!Array.isArray(path)) return 0;
+  return isClosedPath(path) ? path.length - 1 : path.length;
+}
+
+function wrapIndex(index, length) {
+  return ((index % length) + length) % length;
+}
+
+function samplePath(path, index) {
+  const length = effectivePathLength(path);
+  if (length <= 0) return null;
+  if (length === 1) return path[0];
+
+  const wrapped = wrapIndex(index, length);
+  const i0 = Math.floor(wrapped);
+  const i1 = (i0 + 1) % length;
+  const t = wrapped - i0;
+  return lerpPoint(path[i0], path[i1], t);
+}
+
+function closestPathIndex(path, point) {
+  const length = effectivePathLength(path);
+  if (length <= 0 || !Array.isArray(point)) return 0;
+
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < length; i += 1) {
+    const d = distanceSquared(path[i], point);
+    if (d < bestDistance) {
+      bestDistance = d;
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex;
+}
+
+function shortestCircularDelta(start, end, length) {
+  let delta = end - start;
+  if (delta > length / 2) delta -= length;
+  if (delta < -length / 2) delta += length;
+  return delta;
+}
+
 function lerpPath(a, b, t) {
   if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return t < 1 ? a : b;
   return a.map((point, index) => lerpPoint(point, b[index], t));
 }
 
+function interpolateAlongPath(pathA, pathB, fromPosition, toPosition, t) {
+  if (!Array.isArray(pathA) || !Array.isArray(pathB) || pathA.length !== pathB.length) {
+    return lerpPoint(fromPosition, toPosition, t);
+  }
+
+  const length = effectivePathLength(pathA);
+  if (length < 2) return lerpPoint(fromPosition, toPosition, t);
+
+  const startIndex = closestPathIndex(pathA, fromPosition);
+  const endIndex = closestPathIndex(pathB, toPosition);
+  const delta = shortestCircularDelta(startIndex, endIndex, length);
+  const blendedPath = lerpPath(pathA, pathB, t);
+  return samplePath(blendedPath, startIndex + delta * t) || lerpPoint(fromPosition, toPosition, t);
+}
+
 function interpolatedSnapshot(from, to, t) {
   const geometryA = from.geometry;
   const geometryB = to.geometry;
+  const targetPosition = interpolateAlongPath(
+    geometryA.target_orbit_km,
+    geometryB.target_orbit_km,
+    geometryA.target_position_km,
+    geometryB.target_position_km,
+    t,
+  );
+  const secondaryPosition = interpolateAlongPath(
+    geometryA.secondary_orbit_km,
+    geometryB.secondary_orbit_km,
+    geometryA.secondary_position_km,
+    geometryB.secondary_position_km,
+    t,
+  );
+  const closest = lerpPoint(targetPosition, secondaryPosition, 0.5);
 
   return {
     ...to,
@@ -189,9 +285,9 @@ function interpolatedSnapshot(from, to, t) {
     predictive_std: lerp(from.predictive_std, to.predictive_std, t),
     geometry: {
       ...geometryB,
-      target_position_km: lerpPoint(geometryA.target_position_km, geometryB.target_position_km, t),
-      secondary_position_km: lerpPoint(geometryA.secondary_position_km, geometryB.secondary_position_km, t),
-      closest_approach_km: lerpPoint(geometryA.closest_approach_km, geometryB.closest_approach_km, t),
+      target_position_km: targetPosition,
+      secondary_position_km: secondaryPosition,
+      closest_approach_km: closest,
       target_orbit_km: lerpPath(geometryA.target_orbit_km, geometryB.target_orbit_km, t),
       secondary_orbit_km: lerpPath(geometryA.secondary_orbit_km, geometryB.secondary_orbit_km, t),
       relative_distance_km: lerp(geometryA.relative_distance_km, geometryB.relative_distance_km, t),
@@ -326,16 +422,18 @@ function populateHorizonSelect() {
 
 function renderMetrics(event, snapshot) {
   const geometry = snapshot.geometry;
+  const modelAvailable = isFiniteNumber(snapshot.model_probability);
+  const uncertaintyAvailable = isFiniteNumber(snapshot.predictive_std);
+
   metricsEl.innerHTML = `
-    <div class="metric"><span class="label">Current risk</span><span class="value">${formatNumber(snapshot.current_risk_log10)}</span></div>
-    <div class="metric"><span class="label">Risk probability</span><span class="value">${formatNumber(snapshot.current_risk_probability, 6)}</span></div>
-    <div class="metric"><span class="label">Model score</span><span class="value">${formatPercent(snapshot.model_probability)}</span></div>
-    <div class="metric"><span class="label">Uncertainty</span><span class="value">${formatPercent(snapshot.predictive_std)}</span></div>
-    <div class="metric"><span class="label">Time to TCA</span><span class="value">${formatNumber(snapshot.time_to_tca_days, 2)} d</span></div>
-    <div class="metric"><span class="label">High-risk label</span><span class="value">${event.high_risk ? "yes" : "no"}</span></div>
-    <div class="metric"><span class="label">Relative distance</span><span class="value">${formatNumber(geometry.relative_distance_km, 3)} km</span></div>
-    <div class="metric"><span class="label">Display scale</span><span class="value">${formatNumber(geometry.display_relative_scale, 1)}×</span></div>
-    <div class="metric wide"><span class="label">Geometry source</span><span class="value">${geometry.mode.replaceAll("_", " ")}</span></div>
+    <div class="metric"><span class="label">Current probability</span>${metricValue(formatNumber(snapshot.current_risk_probability, 6))}</div>
+    <div class="metric"><span class="label">Risk log10</span>${metricValue(formatNumber(snapshot.current_risk_log10))}</div>
+    <div class="metric"><span class="label">BEACON score</span>${modelAvailable ? metricValue(formatPercent(snapshot.model_probability)) : metricValue("not exported", "muted-value")}</div>
+    <div class="metric"><span class="label">Uncertainty</span>${uncertaintyAvailable ? metricValue(formatPercent(snapshot.predictive_std)) : metricValue("not exported", "muted-value")}</div>
+    <div class="metric"><span class="label">Time to TCA</span>${metricValue(`${formatNumber(snapshot.time_to_tca_days, 2)} d`)}</div>
+    <div class="metric"><span class="label">Relative distance</span>${metricValue(`${formatNumber(geometry.relative_distance_km, 3)} km`)}</div>
+    <div class="metric"><span class="label">Display scale</span>${metricValue(`${formatNumber(geometry.display_relative_scale, 1)}×`)}</div>
+    <div class="metric wide"><span class="label">Geometry source</span>${metricValue(geometry.mode.replaceAll("_", " "))}</div>
   `;
 
   const notes = [state.data.metadata.coordinate_note, state.data.metadata.display_scale_note].filter(Boolean).join(" ");
@@ -348,7 +446,7 @@ function updateEntityGeometry(snapshot) {
   const geometry = snapshot.geometry;
   const target = kmToCartesian(geometry.target_position_km);
   const secondary = kmToCartesian(geometry.secondary_position_km);
-  const closest = kmToCartesian(geometry.closest_approach_km);
+  const closest = cartesianMidpoint(target, secondary);
 
   viewer.entities.suspendEvents();
 
@@ -357,13 +455,25 @@ function updateEntityGeometry(snapshot) {
   state.refs.separation.polyline.positions = new Cesium.ConstantProperty([target, secondary]);
 
   state.refs.targetObject.position = new Cesium.ConstantPositionProperty(target);
-  state.refs.targetObject.point.color = new Cesium.ConstantProperty(riskColor(snapshot));
+  state.refs.targetObject.point.color = new Cesium.ConstantProperty(TARGET_COLOR);
 
   state.refs.secondaryObject.position = new Cesium.ConstantPositionProperty(secondary);
   state.refs.closestApproach.position = new Cesium.ConstantPositionProperty(closest);
+  state.refs.closestApproach.point.outlineColor = new Cesium.ConstantProperty(riskColor(snapshot));
 
   viewer.entities.resumeEvents();
   viewer.scene.requestRender();
+}
+
+function setTracking(enabled) {
+  ensureSceneEntities();
+
+  if (enabled) {
+    viewer.trackedEntity = state.refs.closestApproach;
+  } else {
+    viewer.trackedEntity = undefined;
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+  }
 }
 
 function renderSnapshot(snapshot, track = false) {
@@ -372,7 +482,7 @@ function renderSnapshot(snapshot, track = false) {
   renderMetrics(currentEvent(), snapshot);
 
   if (track && trackToggle.checked) {
-    centerCameraOnSnapshot(snapshot, false);
+    setTracking(true);
   }
 }
 
@@ -386,9 +496,14 @@ function renderScene(fly = false) {
   }
 }
 
+function eventCenter(snapshot) {
+  const geometry = snapshot.geometry;
+  return cartesianMidpoint(kmToCartesian(geometry.target_position_km), kmToCartesian(geometry.secondary_position_km));
+}
+
 function cameraRangeForSnapshot(snapshot) {
   const geometry = snapshot.geometry;
-  const closest = kmToCartesian(geometry.closest_approach_km);
+  const closest = eventCenter(snapshot);
   const target = kmToCartesian(geometry.target_position_km);
   const secondary = kmToCartesian(geometry.secondary_position_km);
   const separation = Cesium.Cartesian3.distance(target, secondary);
@@ -397,17 +512,24 @@ function cameraRangeForSnapshot(snapshot) {
 }
 
 function centerCameraOnSnapshot(snapshot, animated = true) {
-  const closest = kmToCartesian(snapshot.geometry.closest_approach_km);
+  const center = eventCenter(snapshot);
   const range = cameraRangeForSnapshot(snapshot);
   const offset = new Cesium.HeadingPitchRange(0.0, -0.42, range);
 
+  setTracking(false);
+
   if (animated) {
-    viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(closest, 250_000), {
+    viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(center, 250_000), {
       duration: 0.65,
       offset,
+      complete: () => {
+        viewer.camera.lookAt(center, offset);
+        if (trackToggle.checked) setTracking(true);
+      },
     });
   } else {
-    viewer.camera.lookAt(closest, offset);
+    viewer.camera.lookAt(center, offset);
+    if (trackToggle.checked) setTracking(true);
   }
 }
 
@@ -433,6 +555,7 @@ function transitionToHorizon(index, options = {}) {
   }
 
   const startTime = performance.now();
+  setTracking(trackToggle.checked);
 
   function frame(now) {
     const raw = Math.min(1, (now - startTime) / INTERPOLATION_MS);
@@ -473,6 +596,7 @@ function togglePlay() {
   }
 
   trackToggle.checked = true;
+  setTracking(true);
   playButton.textContent = "Pause";
 
   state.playTimer = setInterval(() => {
@@ -513,7 +637,7 @@ trackToggle.addEventListener("change", () => {
   if (trackToggle.checked) {
     centerCameraOnSnapshot(state.displaySnapshot || currentSnapshot(), true);
   } else {
-    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    setTracking(false);
   }
 });
 smoothToggle.addEventListener("change", () => stopAnimation());
