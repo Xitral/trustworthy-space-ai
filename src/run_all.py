@@ -86,6 +86,9 @@ REPEATED_SPLIT_EXPECTED_OUTPUTS = [
     "results/repeated_split_summary.csv",
     "results/repeated_split_escalation.csv",
     "results/repeated_split_escalation_summary.csv",
+    "figures/repeated_split_pr_auc.png",
+    "figures/repeated_split_top5_recall.png",
+    "figures/repeated_split_escalation_10pct.png",
 ]
 
 FIGURE_EXPECTED_OUTPUTS = [
