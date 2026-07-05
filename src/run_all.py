@@ -63,6 +63,7 @@ CORE_EXPECTED_OUTPUTS = [
     "data/processed/event_labels.csv",
     "data/processed/horizon_snapshots.parquet",
     "results/horizon_coverage.csv",
+    "results/horizon_post_tca_diagnostics.csv",
     "results/baseline_metrics.csv",
     "results/calibration_metrics.csv",
     "results/calibration_curves.csv",
@@ -135,7 +136,72 @@ def parse_args() -> argparse.Namespace:
         help="Continue running later steps after a failed step.",
     )
 
+    parser.add_argument(
+        "--repeated-n-splits",
+        type=int,
+        default=None,
+        help="Override repeated_splits.py --n-splits.",
+    )
+
+    parser.add_argument(
+        "--repeated-n-bootstraps",
+        type=int,
+        default=None,
+        help="Override repeated_splits.py --n-bootstraps.",
+    )
+
+    parser.add_argument(
+        "--repeated-max-iter",
+        type=int,
+        default=None,
+        help="Override repeated_splits.py --max-iter.",
+    )
+
+    parser.add_argument(
+        "--repeated-n-jobs",
+        type=int,
+        default=None,
+        help="Override repeated_splits.py --n-jobs.",
+    )
+
+    parser.add_argument(
+        "--repeated-backend",
+        choices=["loky", "threading"],
+        default=None,
+        help="Override repeated_splits.py --backend.",
+    )
+
+    parser.add_argument(
+        "--repeated-skip-uncertainty",
+        action="store_true",
+        help="Pass --skip-uncertainty to repeated_splits.py only.",
+    )
+
     return parser.parse_args()
+
+
+def repeated_split_args(args: argparse.Namespace) -> list[str]:
+    command_args = []
+
+    if args.repeated_n_splits is not None:
+        command_args.extend(["--n-splits", str(args.repeated_n_splits)])
+
+    if args.repeated_n_bootstraps is not None:
+        command_args.extend(["--n-bootstraps", str(args.repeated_n_bootstraps)])
+
+    if args.repeated_max_iter is not None:
+        command_args.extend(["--max-iter", str(args.repeated_max_iter)])
+
+    if args.repeated_n_jobs is not None:
+        command_args.extend(["--n-jobs", str(args.repeated_n_jobs)])
+
+    if args.repeated_backend is not None:
+        command_args.extend(["--backend", args.repeated_backend])
+
+    if args.repeated_skip_uncertainty:
+        command_args.append("--skip-uncertainty")
+
+    return command_args
 
 
 def build_steps(args: argparse.Namespace) -> list[dict]:
@@ -151,7 +217,14 @@ def build_steps(args: argparse.Namespace) -> list[dict]:
         if args.skip_repeated_splits and step["script"] == "src/repeated_splits.py":
             continue
 
-        steps.append(step)
+        step_copy = dict(step)
+
+        if step_copy["script"] == "src/repeated_splits.py":
+            step_copy["args"] = repeated_split_args(args)
+        else:
+            step_copy["args"] = []
+
+        steps.append(step_copy)
 
     return steps
 
@@ -181,10 +254,11 @@ def ensure_script_exists(script_path: str) -> None:
 def run_step(step: dict) -> bool:
     name = step["name"]
     script = step["script"]
+    step_args = step.get("args", [])
 
     ensure_script_exists(script)
 
-    command = [sys.executable, "-u", script]
+    command = [sys.executable, "-u", script, *step_args]
 
     env = os.environ.copy()
 
