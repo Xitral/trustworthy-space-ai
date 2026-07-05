@@ -188,6 +188,12 @@ button:hover {
   font-weight: 750;
 }
 
+.metric .muted-value {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
 .metric.wide {
   grid-column: 1 / -1;
 }
