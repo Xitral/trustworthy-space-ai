@@ -4,9 +4,9 @@
 
 Satellite conjunction assessment is a rare-event decision-support problem in which operators must prioritize a small number of potentially high-risk events from a much larger set of routine conjunction warnings. This work introduces **BEACON**, a reproducible study of calibrated, uncertainty-aware machine learning for satellite conjunction triage using public conjunction data message data.
 
-BEACON evaluates event-level risk prediction across early, 3-day, 2-day, and 1-day warning horizons using leakage-safe event splits. The study compares learned models against a direct current-risk baseline, evaluates probability calibration, and tests whether bootstrap ensemble uncertainty can identify events that should be escalated for human review.
+BEACON evaluates event-level risk prediction across early, 3-day, 2-day, and 1-day warning horizons using leakage-safe event splits. The study compares learned models against a direct current-risk baseline, evaluates probability calibration, tests whether bootstrap ensemble uncertainty can identify events that should be escalated for human review, and ablates the CDM-provided current `risk` feature.
 
-Across 20 repeated event-level train/validation/test splits, learned gradient boosting models improve rare-event ranking over direct current-risk ranking at every evaluated horizon. The strongest repeated-split PR-AUC values are 0.806 at 1 day, 0.630 at 2 days, 0.493 at 3 days, and 0.233 at the early horizon, compared with current-risk baseline PR-AUC values of 0.581, 0.367, 0.237, and 0.109 respectively. At the 10% escalation level, bootstrap uncertainty captures 97.5% of high-risk events at 1 day, 96.3% at 2 days, 97.5% at 3 days, and 80.8% at the early horizon, far above random escalation. Current-risk escalation remains a very strong comparator, so uncertainty is best interpreted as a complementary human-review signal rather than a replacement for domain risk estimates.
+Across 20 repeated event-level train/validation/test splits, learned gradient boosting models improve rare-event ranking over direct current-risk ranking at every evaluated horizon. The strongest repeated-split PR-AUC values are 0.806 at 1 day, 0.630 at 2 days, 0.493 at 3 days, and 0.233 at the early horizon, compared with current-risk baseline PR-AUC values of 0.581, 0.367, 0.237, and 0.109 respectively. A current-risk feature ablation shows that removing the current `risk` feature reduces gradient-boosting PR-AUC at every horizon, but the no-risk model still exceeds direct current-risk PR-AUC. At the 10% escalation level, bootstrap uncertainty captures 97.5% of high-risk events at 1 day, 96.3% at 2 days, 97.5% at 3 days, and 80.8% at the early horizon, far above random escalation. Current-risk escalation remains a very strong comparator, so uncertainty is best interpreted as a complementary human-review signal rather than a replacement for domain risk estimates.
 
 ## 1. Introduction
 
@@ -19,7 +19,8 @@ This project studies whether lightweight machine learning models can support con
 1. rare-event risk ranking,
 2. probability calibration,
 3. uncertainty-aware escalation,
-4. and robustness across repeated event-level splits.
+4. robustness across repeated event-level splits,
+5. and transparent interpretation of how much performance depends on the current CDM risk estimate.
 
 BEACON is not intended to replace operational conjunction assessment systems. It is a research prototype for evaluating how machine learning should be tested when applied to space-safety decision support.
 
@@ -36,6 +37,8 @@ BEACON is not intended to replace operational conjunction assessment systems. It
 **RQ5:** Can uncertainty estimates identify predictions that should be escalated for human review?
 
 **RQ6:** Are the main findings stable across repeated event-level train/validation/test splits?
+
+**RQ7:** How much of the learned model's performance depends on the CDM-provided current `risk` feature?
 
 ## 3. Data
 
@@ -87,7 +90,17 @@ Learned models are allowed to use the current CDM `risk` feature along with the 
 
 Final-risk label metadata, including `final_risk` and `final_time_to_tca`, is excluded from model features to avoid label leakage.
 
-### 5.3 Calibration
+### 5.3 Current-risk feature ablation
+
+To make the role of the CDM `risk` feature explicit, BEACON includes a current-risk feature ablation. The ablation compares three policies across the same repeated event-level splits:
+
+- direct current-risk ranking,
+- gradient boosting with the current `risk` feature included,
+- gradient boosting with the current `risk` feature removed.
+
+This experiment separates two claims. First, it tests whether a learned model can improve over simply sorting by the current risk estimate. Second, it tests whether non-risk CDM/context features contain useful signal when the current risk estimate is unavailable to the learned model.
+
+### 5.4 Calibration
 
 Gradient boosting probabilities are calibrated using sigmoid calibration on the validation split. Calibration is evaluated on held-out test events using:
 
@@ -98,7 +111,7 @@ Gradient boosting probabilities are calibrated using sigmoid calibration on the 
 
 Calibration is important because a model can rank events well while still producing probabilities that are poorly aligned with observed event frequencies.
 
-### 5.4 Bayesian and Bayesian-inspired uncertainty estimation
+### 5.5 Bayesian and Bayesian-inspired uncertainty estimation
 
 BEACON includes a Laplace-approximated Bayesian logistic regression baseline. This model uses a Gaussian prior, Bernoulli likelihood, MAP estimation, and a local Gaussian posterior approximation. It provides a true Bayesian probabilistic baseline, although it is not the strongest ranking model in the current experiments.
 
@@ -111,9 +124,9 @@ The predictive standard deviation is used as an uncertainty score. Events with t
 
 The bootstrap ensemble is called **Bayesian-inspired** rather than fully Bayesian because it does not explicitly define priors, likelihoods, or posterior inference over the gradient boosting model. Instead, it approximates uncertainty by measuring disagreement across models trained on plausible resampled versions of the data.
 
-### 5.5 Repeated split robustness
+### 5.6 Repeated split robustness
 
-Because high-risk conjunctions are rare, a single fixed test split can be sensitive to which high-risk events appear in the test set. To reduce this risk, BEACON repeats the event-level train/validation/test split across 20 random seeds and reports mean and standard deviation for ranking, calibration, top-K recall, and escalation metrics.
+Because high-risk conjunctions are rare, a single fixed test split can be sensitive to which high-risk events appear in the test set. To reduce this risk, BEACON repeats the event-level train/validation/test split across 20 random seeds and reports mean and standard deviation for ranking, calibration, top-K recall, escalation metrics, and risk ablation metrics.
 
 This robustness check changes the interpretation of the results. Rather than relying on a single split, BEACON asks whether the main trends persist across many leakage-safe event-level splits.
 
@@ -128,6 +141,7 @@ The primary metrics are:
 - precision at top 1%, 5%, and 10%
 - recall at top 1%, 5%, and 10%
 - positive escalation rate under uncertainty-based review
+- risk-ablation deltas
 - repeated-split mean and standard deviation
 
 Accuracy is not emphasized because the positive class is extremely rare.
@@ -208,14 +222,32 @@ The coverage tradeoff shows how many high-risk events are escalated as the autom
 
 These results should not be interpreted as showing that uncertainty replaces current risk. Current-risk escalation remains an extremely strong baseline, especially near TCA. Instead, the repeated split results support a more careful claim: uncertainty is a complementary human-review signal that performs far above random escalation and remains competitive with current-risk escalation.
 
-### 7.5 Repeated split robustness summary
+### 7.5 Current-risk feature ablation
+
+The current-risk feature ablation clarifies the source of the learned model's ranking gains. Gradient boosting with the current `risk` feature outperforms direct current-risk ranking in PR-AUC at every horizon. Removing the current `risk` feature reduces gradient-boosting PR-AUC at every horizon, but the no-risk model still exceeds direct current-risk PR-AUC.
+
+| Horizon | Current-risk PR-AUC | GB with risk PR-AUC | GB without risk PR-AUC | With risk minus current risk | With risk minus without risk |
+|---|---:|---:|---:|---:|---:|
+| `1d` | 0.581 +/- 0.085 | 0.739 +/- 0.096 | 0.634 +/- 0.147 | +0.158 +/- 0.119 | +0.105 +/- 0.132 |
+| `2d` | 0.367 +/- 0.083 | 0.610 +/- 0.129 | 0.439 +/- 0.107 | +0.243 +/- 0.086 | +0.171 +/- 0.102 |
+| `3d` | 0.237 +/- 0.048 | 0.493 +/- 0.090 | 0.379 +/- 0.089 | +0.257 +/- 0.102 | +0.114 +/- 0.127 |
+| `early` | 0.109 +/- 0.031 | 0.233 +/- 0.082 | 0.180 +/- 0.066 | +0.123 +/- 0.077 | +0.052 +/- 0.061 |
+
+![Risk feature ablation: PR-AUC](../figures/risk_ablation_pr_auc.png)
+
+![Risk feature ablation: top 5% recall](../figures/risk_ablation_top5_recall.png)
+
+The ablation supports a nuanced interpretation. Current `risk` is an important signal: removing it consistently reduces gradient-boosting PR-AUC. However, the no-risk model still outperforms direct current-risk ranking in PR-AUC, suggesting that additional CDM/context features contain independent ranking signal. At the same time, direct current-risk ranking remains very competitive for top-K recall, especially near TCA. Therefore, the strongest claim is not that machine learning replaces current risk. The stronger and more defensible claim is that learned models can combine current risk with additional features to improve rare-event ranking, while current risk remains a central and operationally meaningful signal.
+
+### 7.6 Repeated split robustness summary
 
 The repeated split analysis strengthens the evidence compared with a single held-out split. The positive class remains small, with about 12 high-risk events per test horizon, but the main qualitative results persist across 20 event-level splits:
 
 1. learned models improve PR-AUC over current-risk ranking at every horizon,
 2. top-K recall remains high for learned models,
 3. uncertainty escalation greatly outperforms random escalation,
-4. and current-risk escalation remains a strong, realistic comparator.
+4. current-risk escalation remains a strong, realistic comparator,
+5. and risk ablation shows that current risk is central but not the only predictive signal.
 
 ## 8. Discussion
 
@@ -223,15 +255,17 @@ The results suggest that calibrated and uncertainty-aware machine learning can s
 
 The strongest use case is not replacing operational systems. Instead, BEACON is best understood as a decision-support framework for prioritizing which events deserve closer human review.
 
-Four findings are especially important.
+Five findings are especially important.
 
-First, the task is extremely imbalanced, with high-risk events representing less than 1% of events. This makes accuracy an inappropriate primary metric. PR-AUC, top-K recall, calibration, uncertainty-aware escalation, and repeated split robustness are more meaningful.
+First, the task is extremely imbalanced, with high-risk events representing less than 1% of events. This makes accuracy an inappropriate primary metric. PR-AUC, top-K recall, calibration, uncertainty-aware escalation, risk ablation, and repeated split robustness are more meaningful.
 
 Second, learned models improve rare-event ranking over the current-risk baseline across repeated event-level splits. This matters because the current-risk baseline is a strong and realistic comparator.
 
 Third, uncertainty-based escalation captures most high-risk events by reviewing only a small fraction of the most uncertain predictions. This suggests that uncertainty estimates can help identify cases where automated prediction should defer to human judgment.
 
 Fourth, current-risk escalation remains extremely strong. This is not a weakness of BEACON. It is an important result: domain risk estimates already contain substantial signal, and learned uncertainty should be used to complement, not replace, domain-informed risk ranking.
+
+Fifth, the risk ablation shows that the current CDM `risk` feature is central to learned-model performance but does not fully explain the learned model's PR-AUC gains. The no-risk model still exceeds direct current-risk PR-AUC, while the with-risk model performs best. This supports an additive-feature interpretation rather than a replacement-of-risk interpretation.
 
 ## 9. Limitations
 
@@ -246,6 +280,7 @@ Key limitations include:
 - Bootstrap uncertainty is Bayesian-inspired, not fully Bayesian.
 - The high-risk threshold is a research definition and not an operational decision rule.
 - Learned models include the current CDM risk feature, so results should be interpreted as improvement over direct current-risk ranking, not as risk-free prediction.
+- Risk ablation reduces ambiguity about the current-risk feature, but it does not prove that the learned feature relationships would generalize to other datasets.
 - Events without pre-TCA observations require fallback handling and are tracked through diagnostics.
 - The figures and metrics should be interpreted as preliminary evidence, not deployment-ready validation.
 
@@ -255,7 +290,7 @@ Because each test horizon contains only a small number of high-risk events, stro
 
 BEACON demonstrates a reproducible framework for evaluating trustworthy AI in satellite conjunction triage.
 
-The project shows that rare-event ranking, calibration, uncertainty-aware escalation, and repeated split robustness provide a more appropriate evaluation lens than accuracy alone. Learned models improve prioritization over direct current-risk ranking across 20 repeated event-level splits. Bootstrap ensemble uncertainty identifies many high-risk events for human review and greatly outperforms random escalation, while remaining complementary to strong current-risk escalation.
+The project shows that rare-event ranking, calibration, uncertainty-aware escalation, risk-feature ablation, and repeated split robustness provide a more appropriate evaluation lens than accuracy alone. Learned models improve prioritization over direct current-risk ranking across 20 repeated event-level splits. The risk ablation shows that current risk is a central signal, but additional CDM/context features still contain ranking value. Bootstrap ensemble uncertainty identifies many high-risk events for human review and greatly outperforms random escalation, while remaining complementary to strong current-risk escalation.
 
 Future work should add:
 
