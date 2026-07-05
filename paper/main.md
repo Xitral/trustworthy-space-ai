@@ -187,7 +187,7 @@ For rare-event triage, the most important operational question is not whether th
 Across 20 repeated event-level splits, learned models improve PR-AUC over the current-risk baseline at every evaluated horizon.
 
 | Horizon | Best learned model | Best learned PR-AUC | Current-risk PR-AUC |
-|---|---|---:|---:|
+| --- | --- | ---: | ---: |
 | `1d` | bootstrap gradient boosting ensemble | 0.806 +/- 0.091 | 0.581 +/- 0.085 |
 | `2d` | bootstrap gradient boosting ensemble | 0.630 +/- 0.106 | 0.367 +/- 0.083 |
 | `3d` | gradient boosting | 0.493 +/- 0.090 | 0.237 +/- 0.048 |
@@ -240,7 +240,7 @@ This result suggests that uncertainty itself is a useful triage signal. The mode
 Across 20 repeated event-level splits, uncertainty-based escalation substantially outperforms random escalation. At the 10% escalation level, uncertainty captures:
 
 | Horizon | Uncertainty escalation | Current-risk escalation | Random escalation |
-|---|---:|---:|---:|
+| --- | ---: | ---: | ---: |
 | `1d` | 97.5% +/- 3.9% | 99.6% +/- 1.9% | 8.3% +/- 7.2% |
 | `2d` | 96.3% +/- 4.3% | 97.9% +/- 3.7% | 9.6% +/- 7.8% |
 | `3d` | 97.5% +/- 3.9% | 97.9% +/- 3.7% | 11.3% +/- 10.2% |
@@ -259,7 +259,7 @@ These results should not be interpreted as showing that uncertainty replaces cur
 The current-risk feature ablation clarifies the source of the learned model's ranking gains. Gradient boosting with the current `risk` feature outperforms direct current-risk ranking in PR-AUC at every horizon. Removing the current `risk` feature reduces gradient-boosting PR-AUC at every horizon, but the no-risk model still exceeds direct current-risk PR-AUC.
 
 | Horizon | Current-risk PR-AUC | GB with risk PR-AUC | GB without risk PR-AUC | With risk minus current risk | With risk minus without risk |
-|---|---:|---:|---:|---:|---:|
+| --- | ---: | ---: | ---: | ---: | ---: |
 | `1d` | 0.581 +/- 0.085 | 0.739 +/- 0.096 | 0.634 +/- 0.147 | +0.158 +/- 0.119 | +0.105 +/- 0.132 |
 | `2d` | 0.367 +/- 0.083 | 0.610 +/- 0.129 | 0.439 +/- 0.107 | +0.243 +/- 0.086 | +0.171 +/- 0.102 |
 | `3d` | 0.237 +/- 0.048 | 0.493 +/- 0.090 | 0.379 +/- 0.089 | +0.257 +/- 0.102 | +0.114 +/- 0.127 |
