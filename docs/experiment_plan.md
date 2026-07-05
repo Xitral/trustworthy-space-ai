@@ -1,7 +1,5 @@
 # BEACON Methodology
 
-## Title
-
 ## BEACON: Bayesian Event Assessment for Conjunction Observation and Notification
 
 BEACON studies calibrated, uncertainty-aware machine learning for satellite conjunction triage using public conjunction data message data.
