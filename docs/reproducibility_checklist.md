@@ -39,18 +39,27 @@ This checklist describes what a reviewer should be able to verify after cloning 
 - [ ] `python src/bayesian_logistic.py` writes Bayesian logistic metrics and predictions.
 - [ ] `python src/uncertainty.py` writes uncertainty metrics, abstention results, and predictions.
 - [ ] `python src/repeated_splits.py` writes repeated split metrics and summaries.
+- [ ] `python src/risk_ablation.py` writes risk ablation metrics, summaries, and deltas.
+
+## Risk Ablation
+
+- [ ] The ablation compares direct current-risk ranking with learned gradient boosting using current risk.
+- [ ] The ablation also compares against learned gradient boosting with the current `risk` feature removed.
+- [ ] `results/risk_ablation_deltas.csv` reports with-risk versus current-risk and with-risk versus no-risk deltas.
+- [ ] Manuscript claims explain whether improvements are incremental over current risk or dependent on current risk.
 
 ## Figures and Reporting
 
 - [ ] `python src/make_figures.py` writes all paper figures.
 - [ ] Repeated split figures are generated from repeated split summary files.
+- [ ] Risk ablation figures are generated from risk ablation summary files.
 - [ ] `paper/main.md` references generated figures correctly.
 - [ ] README findings match repeated split summary values.
 
 ## One-Command Pipeline
 
 - [ ] `python src/run_all.py --skip-inspect` completes on a configured machine.
-- [ ] For a quick smoke run, repeated split settings can be reduced through `run_all.py`.
+- [ ] For a quick smoke run, repeated split and risk ablation settings can be reduced through `run_all.py`.
 - [ ] The pipeline output summary reports expected outputs.
 
 ## Interpretation Guardrails
@@ -58,4 +67,5 @@ This checklist describes what a reviewer should be able to verify after cloning 
 - [ ] Results are framed as rare-event triage, not ordinary accuracy maximization.
 - [ ] Uncertainty escalation is described as a human-review signal, not an automated action rule.
 - [ ] Current-risk escalation is treated as a strong comparator.
+- [ ] Risk ablation is used to avoid overstating learned-model independence from current risk.
 - [ ] Limitations mention public data, small positive counts, lack of operational validation, and the research-defined threshold.
