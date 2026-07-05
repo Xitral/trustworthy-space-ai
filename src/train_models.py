@@ -39,11 +39,13 @@ EXCLUDE_COLUMNS = {
     "final_risk",
     "final_collision_risk",
     "final_time_to_tca",
-
     # Diagnostic metadata, not real CDM prediction features.
     "requested_horizon_days",
     "meets_requested_horizon",
     "is_horizon_fallback",
+    "event_has_pre_tca_row",
+    "selected_row_is_post_tca",
+    "final_row_is_post_tca",
 }
 
 
@@ -260,10 +262,10 @@ def main():
 
     # RandomForest internally uses float32 in parts of sklearn, so extremely
     # large values can crash even if they are technically finite.
-    FLOAT32_SAFE_MAX = 1e30
+    float32_safe_max = 1e30
     df[feature_cols] = df[feature_cols].clip(
-        lower=-FLOAT32_SAFE_MAX,
-        upper=FLOAT32_SAFE_MAX,
+        lower=-float32_safe_max,
+        upper=float32_safe_max,
         axis=1,
     )
 
@@ -282,7 +284,11 @@ def main():
     print(f"Events: {df['event_id'].nunique():,}")
     print("\nClass balance:")
     print(df[["event_id", "high_risk"]].drop_duplicates()["high_risk"].value_counts())
-    print(df[["event_id", "high_risk"]].drop_duplicates()["high_risk"].value_counts(normalize=True))
+    print(
+        df[["event_id", "high_risk"]]
+        .drop_duplicates()["high_risk"]
+        .value_counts(normalize=True)
+    )
 
     rows = []
 
