@@ -1,20 +1,30 @@
 // BEACON viewer UX/live-trail patch.
 //
-// This file patches app.js without changing its data model. It replaces the old
-// static-looking orbit trail segments with a dynamic CallbackProperty trail that
-// is recomputed from state.displaySnapshot on every browser frame. That means the
-// trail uses the same interpolated positions as the dots and cannot wait until the
-// horizon transition finishes before moving.
+// This file patches app.js without changing its exported data model. It replaces
+// the static-looking orbit trail updates with dynamic per-segment CallbackProperty
+// trails. Each segment reads the latest interpolated snapshot every frame, so the
+// orbit gradient moves with the dots and the visible trail head terminates at the
+// live object position instead of snapping after the transition completes.
 
 (function patchBeaconViewerUx() {
-  const TRAIL_FRACTION_OF_ORBIT = 0.30;
-  const TRAIL_POINT_COUNT = 64;
-  const MIN_TRAIL_POINTS = 10;
-  const LABEL_FADE_EASE = 0.18;
+  const TRAIL_HEAD_ALPHA = 0.96;
+  const TRAIL_TAIL_ALPHA = 0.018;
+  const FUTURE_ALPHA = 0.025;
+  const LABEL_FADE_EASE = 0.16;
+
+  const originalRenderSnapshot = renderSnapshot;
+  const originalRenderMetrics = renderMetrics;
+  const originalCenterCameraOnSnapshot = centerCameraOnSnapshot;
+  const originalApplyLabelFade = applyLabelFade;
 
   const labelFadeState = {
     target: 1,
     current: 1,
+  };
+
+  const trailState = {
+    targetTrailSegments: null,
+    secondaryTrailSegments: null,
   };
 
   function squaredDistance(a, b) {
@@ -49,69 +59,95 @@
     return bestProgress;
   }
 
-  function buildMovingTrailPositions(path, progress, currentPosition) {
+  function trailAlphaAtMidpoint(midpoint, liveProgress, length) {
+    const behindDistance = wrapIndex(liveProgress - midpoint, length);
+    const raw = 1 - behindDistance / length;
+    const eased = Math.pow(clamp(raw, 0, 1), 1.55);
+    return eased < 0.015 ? TRAIL_TAIL_ALPHA : clamp(eased * TRAIL_HEAD_ALPHA, TRAIL_TAIL_ALPHA, TRAIL_HEAD_ALPHA);
+  }
+
+  function ensureTrailData(refKey, color, count) {
+    if (!trailState[refKey] || trailState[refKey].length !== count) {
+      for (const entity of state.refs[refKey] || []) {
+        viewer.entities.remove(entity);
+      }
+      state.refs[refKey] = [];
+      trailState[refKey] = [];
+
+      for (let i = 0; i < count; i += 1) {
+        const segmentData = {
+          positions: [Cesium.Cartesian3.ZERO, Cesium.Cartesian3.ZERO],
+          alpha: 0,
+        };
+        const entity = viewer.entities.add({
+          name: `${refKey} gradient segment`,
+          polyline: {
+            positions: new Cesium.CallbackProperty(() => segmentData.positions, false),
+            width: 2.8,
+            material: new Cesium.ColorMaterialProperty(
+              new Cesium.CallbackProperty(() => color.withAlpha(segmentData.alpha), false),
+            ),
+            clampToGround: false,
+            arcType: Cesium.ArcType.NONE,
+          },
+        });
+        state.refs[refKey].push(entity);
+        trailState[refKey].push(segmentData);
+      }
+    }
+
+    return trailState[refKey];
+  }
+
+  function buildFullOrbitGradientSegments(path, progress, currentPosition) {
     const length = effectivePathLength(path);
     if (length < 2) return [];
 
     const liveProgress = closestProgressOnPath(path, currentPosition, progress);
-    const livePoint = currentPosition || samplePath(path, liveProgress);
-    if (!Array.isArray(livePoint)) return [];
+    const wrappedProgress = wrapIndex(liveProgress, length);
+    const activeIndex = Math.floor(wrappedProgress);
+    const frac = wrappedProgress - activeIndex;
+    const livePoint = currentPosition || samplePath(path, wrappedProgress);
+    const segments = [];
 
-    const trailLength = Math.max(2, length * TRAIL_FRACTION_OF_ORBIT);
-    const pointCount = Math.min(TRAIL_POINT_COUNT, Math.max(MIN_TRAIL_POINTS, Math.round(trailLength)));
-    const startProgress = liveProgress - trailLength;
-    const positions = [];
+    for (let i = 0; i < length; i += 1) {
+      const p0 = path[i];
+      const p1 = path[(i + 1) % length];
 
-    for (let i = 0; i < pointCount; i += 1) {
-      const t = i / (pointCount - 1);
-      const sampleProgress = startProgress + trailLength * t;
-      const point = i === pointCount - 1 ? livePoint : samplePath(path, sampleProgress);
-      if (Array.isArray(point)) positions.push(kmToCartesian(point));
+      if (i === activeIndex) {
+        const behindEnd = frac > 1e-6 ? livePoint : p0;
+        segments.push({
+          start: p0,
+          end: behindEnd,
+          alpha: frac > 1e-6 ? trailAlphaAtMidpoint(i + frac * 0.5, wrappedProgress, length) : 0,
+        });
+        segments.push({
+          start: livePoint,
+          end: p1,
+          alpha: frac < 1 - 1e-6 ? FUTURE_ALPHA : 0,
+        });
+      } else {
+        const alpha = trailAlphaAtMidpoint(i + 0.5, wrappedProgress, length);
+        segments.push({ start: p0, end: p1, alpha });
+      }
     }
 
-    // Hard guarantee: the rendered trail head is the exact same point as the dot.
-    positions[positions.length - 1] = kmToCartesian(livePoint);
-    return positions;
-  }
-
-  function removeSegmentEntities(refKey) {
-    const existing = state.refs[refKey] || [];
-    for (const entity of existing) {
-      viewer.entities.remove(entity);
-    }
-    state.refs[refKey] = [];
-  }
-
-  function ensureLiveTrailEntity(refKey, color) {
-    const entityKey = `${refKey}LiveEntity`;
-    const positionsKey = `${refKey}LivePositions`;
-
-    if (state.refs[entityKey]) return state.refs[entityKey];
-
-    removeSegmentEntities(refKey);
-    state.refs[positionsKey] = [];
-
-    const entity = viewer.entities.add({
-      name: `${refKey} live animated trail`,
-      polyline: {
-        positions: new Cesium.CallbackProperty(() => state.refs[positionsKey] || [], false),
-        width: 3.2,
-        material: new Cesium.ColorMaterialProperty(color.withAlpha(0.82)),
-        clampToGround: false,
-        arcType: Cesium.ArcType.NONE,
-      },
-    });
-
-    state.refs[entityKey] = entity;
-    return entity;
+    return segments;
   }
 
   function syncLiveTrail(path, progress, currentPosition, refKey, color) {
-    const entity = ensureLiveTrailEntity(refKey, color);
-    const positionsKey = `${refKey}LivePositions`;
-    const positions = buildMovingTrailPositions(path, progress, currentPosition);
-    state.refs[positionsKey] = positions;
-    entity.show = positions.length >= 2;
+    const length = effectivePathLength(path);
+    if (length < 2) return;
+
+    const displaySegments = buildFullOrbitGradientSegments(path, progress, currentPosition);
+    const segmentData = ensureTrailData(refKey, color, displaySegments.length);
+
+    for (let i = 0; i < displaySegments.length; i += 1) {
+      const segment = displaySegments[i];
+      segmentData[i].positions = pathToCartesianPair(segment.start, segment.end);
+      segmentData[i].alpha = segment.alpha;
+      state.refs[refKey][i].show = segment.alpha > 0.01;
+    }
   }
 
   function syncLiveTrails(snapshot) {
@@ -134,11 +170,31 @@
     );
   }
 
-  // app.js calls this from updateEntityGeometry. Keep the same signature, but route
-  // it to the dynamic single-polyline trail system above.
   updateTrailSegments = function patchedUpdateTrailSegments(path, progress, currentPosition, refKey, color) {
     syncLiveTrail(path, progress, currentPosition, refKey, color);
   };
+
+  function ensureSeparationLine() {
+    if (!state.refs.separation || state.refs.separationLivePatched) return;
+    state.refs.separationLivePositions = [Cesium.Cartesian3.ZERO, Cesium.Cartesian3.ZERO];
+    state.refs.separation.polyline.positions = new Cesium.CallbackProperty(
+      () => state.refs.separationLivePositions,
+      false,
+    );
+    state.refs.separation.polyline.material = new Cesium.ColorMaterialProperty(SEPARATION_COLOR);
+    state.refs.separationLivePatched = true;
+  }
+
+  function syncSeparationLine(snapshot) {
+    const geometry = snapshot?.geometry;
+    if (!geometry || !state.refs.separation) return;
+    ensureSeparationLine();
+    state.refs.separationLivePositions = [
+      kmToCartesian(geometry.target_position_km),
+      kmToCartesian(geometry.secondary_position_km),
+    ];
+    state.refs.separation.show = true;
+  }
 
   function positiveRiskMagnitude(snapshot) {
     const risk = Number(snapshot?.current_risk_log10);
@@ -149,82 +205,101 @@
   function patchRiskMetric(snapshot) {
     const labels = metricsEl.querySelectorAll(".metric .label");
     for (const label of labels) {
-      if (label.textContent.trim() !== "Risk log10") continue;
+      if (label.textContent.trim() !== "Risk log10" && label.textContent.trim() !== "Risk magnitude") continue;
       label.textContent = "Risk magnitude";
       const value = label.parentElement?.querySelector(".value");
       if (value) value.textContent = positiveRiskMagnitude(snapshot);
     }
   }
 
-  const originalRenderMetrics = renderMetrics;
   renderMetrics = function patchedRenderMetrics(event, snapshot) {
     originalRenderMetrics(event, snapshot);
     patchRiskMetric(snapshot);
   };
 
-  function cameraDistanceToCurrentCenter() {
-    if (!state.displaySnapshot) return null;
-    const center = eventCenter(state.displaySnapshot);
+  function cameraDistanceToCenter(snapshot) {
+    if (!snapshot) return null;
+    const center = eventCenter(snapshot);
     const distance = Cesium.Cartesian3.distance(viewer.camera.positionWC, center);
     return Number.isFinite(distance) ? distance : null;
   }
 
-  // Preserve the user's current zoom when focusing/changing horizons. This still
-  // recenters the event, but it stops snapping the camera range back to default.
+  let hasInitialCameraFocus = false;
   centerCameraOnSnapshot = function patchedCenterCameraOnSnapshot(snapshot) {
+    if (!hasInitialCameraFocus) {
+      hasInitialCameraFocus = true;
+      originalCenterCameraOnSnapshot(snapshot);
+      return;
+    }
+
     const center = eventCenter(snapshot);
-    const currentRange = cameraDistanceToCurrentCenter();
-    const fallbackRange = cameraRangeForSnapshot(snapshot);
-    const range = clamp(currentRange ?? fallbackRange, viewer.scene.screenSpaceCameraController.minimumZoomDistance, viewer.scene.screenSpaceCameraController.maximumZoomDistance);
-    const offset = new Cesium.HeadingPitchRange(0.0, -0.42, range);
+    const referenceSnapshot = state.displaySnapshot || snapshot;
+    const range = clamp(
+      cameraDistanceToCenter(referenceSnapshot) ?? cameraRangeForSnapshot(snapshot),
+      viewer.scene.screenSpaceCameraController.minimumZoomDistance,
+      viewer.scene.screenSpaceCameraController.maximumZoomDistance,
+    );
+    const direction = Cesium.Cartesian3.clone(viewer.camera.directionWC);
+    const up = Cesium.Cartesian3.clone(viewer.camera.upWC);
+    const offset = Cesium.Cartesian3.multiplyByScalar(direction, -range, new Cesium.Cartesian3());
+    const destination = Cesium.Cartesian3.add(center, offset, new Cesium.Cartesian3());
+
     viewer.trackedEntity = undefined;
-    viewer.camera.lookAt(center, offset);
+    viewer.camera.setView({
+      destination,
+      orientation: { direction, up },
+    });
     applyLabelFade();
   };
 
-  function labelColor(color, alpha) {
-    return new Cesium.ConstantProperty(color.withAlpha(alpha));
-  }
-
-  function setLabelFade(entity, alpha, backgroundAlpha = 0.45) {
+  function setLabelVisual(entity, alpha, backgroundScale) {
     if (!entity?.label) return;
     const show = alpha > 0.025;
+    const textAlpha = show ? alpha : 0;
+    const bgAlpha = show ? backgroundScale * alpha : 0;
     entity.label.show = show;
-    entity.label.fillColor = labelColor(Cesium.Color.WHITE, alpha);
-    entity.label.backgroundColor = labelColor(Cesium.Color.BLACK, backgroundAlpha * alpha);
+    entity.label.showBackground = show && bgAlpha > 0.01;
+    entity.label.fillColor = Cesium.Color.WHITE.withAlpha(textAlpha);
+    entity.label.outlineColor = Cesium.Color.BLACK.withAlpha(textAlpha);
+    entity.label.backgroundColor = Cesium.Color.BLACK.withAlpha(bgAlpha);
+  }
+
+  function paintLabels(alpha) {
+    setLabelVisual(state.refs.targetObject, alpha, 0.45);
+    setLabelVisual(state.refs.secondaryObject, alpha, 0.45);
+    setLabelVisual(state.refs.closestApproach, state.hovered === "center" ? alpha : 0, 0.55);
   }
 
   applyLabelFade = function patchedApplyLabelFade() {
     if (!state.refs.targetObject || !state.displaySnapshot) return;
-
     labelFadeState.target = labelAlphaForCamera();
-    labelFadeState.current += (labelFadeState.target - labelFadeState.current) * LABEL_FADE_EASE;
-    const alpha = clamp(labelFadeState.current, 0, 1);
-
-    setLabelFade(state.refs.targetObject, alpha, 0.45);
-    setLabelFade(state.refs.secondaryObject, alpha, 0.45);
-    setLabelFade(state.refs.closestApproach, state.hovered === "center" ? alpha : 0, 0.55);
   };
 
-  const originalRenderSnapshot = renderSnapshot;
+  if (viewer.camera.changed?.removeEventListener) {
+    viewer.camera.changed.removeEventListener(originalApplyLabelFade);
+  }
+  viewer.camera.changed.addEventListener(applyLabelFade);
+
   renderSnapshot = function patchedRenderSnapshot(snapshot, track = false) {
-    originalRenderSnapshot(snapshot, track);
+    // Do not let horizon changes recenter/zoom the camera every interpolation frame.
+    originalRenderSnapshot(snapshot, false);
     syncLiveTrails(snapshot);
+    syncSeparationLine(snapshot);
     patchRiskMetric(snapshot);
     applyLabelFade();
   };
 
-  // Lightweight frame pump. It only updates two CallbackProperty arrays and label
-  // alpha, so it avoids the entity churn that made trails disappear earlier.
   function liveFrame() {
     if (state.displaySnapshot) {
       syncLiveTrails(state.displaySnapshot);
-      applyLabelFade();
+      syncSeparationLine(state.displaySnapshot);
+      labelFadeState.current += (labelFadeState.target - labelFadeState.current) * LABEL_FADE_EASE;
+      paintLabels(clamp(labelFadeState.current, 0, 1));
       viewer.scene.requestRender();
     }
     requestAnimationFrame(liveFrame);
   }
-  requestAnimationFrame(liveFrame);
 
+  requestAnimationFrame(liveFrame);
   window.__BEACON_LIVE_TRAILS_PATCHED__ = true;
 })();
