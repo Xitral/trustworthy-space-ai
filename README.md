@@ -2,12 +2,12 @@
 
 [![CI](https://github.com/Xitral/beacon-space-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/Xitral/beacon-space-ai/actions/workflows/ci.yml)
 [![LaTeX Paper](https://github.com/Xitral/beacon-space-ai/actions/workflows/latex.yml/badge.svg)](https://github.com/Xitral/beacon-space-ai/actions/workflows/latex.yml)
-[![Version DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21209120.svg)](https://doi.org/10.5281/zenodo.21209120)
+[![Version DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21209794.svg)](https://doi.org/10.5281/zenodo.21209794)
 [![Concept DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21209119.svg)](https://doi.org/10.5281/zenodo.21209119)
 ![Python](https://img.shields.io/badge/python-3.10-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-research%20prototype-orange)
-![Release](https://img.shields.io/badge/release-v0.2.1-purple)
+![Release](https://img.shields.io/badge/release-v0.2.2-purple)
 
 **BEACON (Bayesian Event Assessment for Conjunction Observation and Notification)** is a reproducible research project for calibrated, uncertainty-aware satellite conjunction triage using public CDM data.
 
@@ -18,13 +18,13 @@ BEACON is a research prototype only. It is not an operational collision-avoidanc
 The manuscript-ready BEACON research artifact is archived on Zenodo:
 
 ```text
-Version DOI: 10.5281/zenodo.21209120
+Version DOI: 10.5281/zenodo.21209794
 Concept DOI: 10.5281/zenodo.21209119
-Version: v0.2.1
+Version: v0.2.2
 Repository: https://github.com/Xitral/beacon-space-ai
 ```
 
-Use the version DOI to cite the exact v0.2.1 artifact used for reproducibility. Use the concept DOI to cite the overall BEACON archive across versions. If you use BEACON, also cite the original public dataset provider.
+Use the version DOI to cite the exact v0.2.2 artifact used for reproducibility. Use the concept DOI to cite the overall BEACON archive across versions. If you use BEACON, also cite the original public dataset provider.
 
 ## What BEACON Studies
 

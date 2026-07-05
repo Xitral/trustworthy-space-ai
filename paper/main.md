@@ -337,7 +337,7 @@ BEACON is not an operational collision-avoidance system. It is a research artifa
 
 ## Artifact Availability
 
-Code, manuscript source, figures, tests, and reproduction scripts for the archived BEACON v0.2.1 research artifact are available through Zenodo at DOI `10.5281/zenodo.21209120` and through the associated GitHub repository. Raw ESA challenge data is not redistributed in the repository and must be obtained according to the original dataset provider's terms.
+Code, manuscript source, figures, tests, and reproduction scripts for the archived BEACON v0.2.2 research artifact are available through Zenodo at DOI `10.5281/zenodo.21209794` and through the associated GitHub repository. Raw ESA challenge data is not redistributed in the repository and must be obtained according to the original dataset provider's terms.
 
 ## References
 
@@ -353,7 +353,7 @@ Code, manuscript source, figures, tests, and reproduction scripts for the archiv
 
 [Guo2017] Chuan Guo, Geoff Pleiss, Yu Sun, and Kilian Q. Weinberger. On Calibration of Modern Neural Networks. *Proceedings of the International Conference on Machine Learning*, 2017.
 
-[Gal2016] Yarin Gal and Zoubin Ghahramani. Dropout as a Bayesian Approximation: Representing Model Uncertainty in Deep Learning. *Proceedings of the International Conference on Machine Learning*, 2016.
+[Gal2016] Yarin Gal and Ghahramani. Dropout as a Bayesian Approximation: Representing Model Uncertainty in Deep Learning. *Proceedings of the International Conference on Machine Learning*, 2016.
 
 [Kendall2017] Alex Kendall and Yarin Gal. What Uncertainties Do We Need in Bayesian Deep Learning for Computer Vision? *Advances in Neural Information Processing Systems*, 2017.
 
