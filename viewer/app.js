@@ -1,6 +1,7 @@
 const DATA_URL = "data/conjunction_events.json";
 
 const EARTH_RADIUS_M = 6_371_000;
+const INTERPOLATION_MS = 950;
 const TARGET_COLOR = Cesium.Color.fromCssColorString("#57a5ff");
 const SECONDARY_COLOR = Cesium.Color.fromCssColorString("#ffb84d");
 const SEPARATION_COLOR = Cesium.Color.fromCssColorString("#ff5b6e");
@@ -95,6 +96,8 @@ const state = {
   eventIndex: 0,
   horizonIndex: 0,
   playTimer: null,
+  animationFrame: null,
+  displaySnapshot: null,
   refs: {},
 };
 
@@ -104,6 +107,8 @@ const metricsEl = document.getElementById("metrics");
 const metadataEl = document.getElementById("metadata");
 const playButton = document.getElementById("playButton");
 const homeButton = document.getElementById("homeButton");
+const trackToggle = document.getElementById("trackToggle");
+const smoothToggle = document.getElementById("smoothToggle");
 
 function kmToCartesian(point) {
   return new Cesium.Cartesian3(point[0] * 1000, point[1] * 1000, point[2] * 1000);
@@ -146,6 +151,61 @@ function currentEvent() {
 
 function currentSnapshot() {
   return currentEvent().snapshots[state.horizonIndex];
+}
+
+function easeInOut(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function lerp(a, b, t) {
+  if (a === null || a === undefined || b === null || b === undefined) return t < 1 ? a : b;
+  const x = Number(a);
+  const y = Number(b);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return t < 1 ? a : b;
+  return x + (y - x) * t;
+}
+
+function lerpPoint(a, b, t) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return t < 1 ? a : b;
+  return a.map((value, index) => lerp(value, b[index], t));
+}
+
+function lerpPath(a, b, t) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return t < 1 ? a : b;
+  return a.map((point, index) => lerpPoint(point, b[index], t));
+}
+
+function interpolatedSnapshot(from, to, t) {
+  const geometryA = from.geometry;
+  const geometryB = to.geometry;
+
+  return {
+    ...to,
+    time_to_tca_days: lerp(from.time_to_tca_days, to.time_to_tca_days, t),
+    current_risk_log10: lerp(from.current_risk_log10, to.current_risk_log10, t),
+    current_risk_probability: lerp(from.current_risk_probability, to.current_risk_probability, t),
+    final_risk_log10: lerp(from.final_risk_log10, to.final_risk_log10, t),
+    model_probability: lerp(from.model_probability, to.model_probability, t),
+    predictive_std: lerp(from.predictive_std, to.predictive_std, t),
+    geometry: {
+      ...geometryB,
+      target_position_km: lerpPoint(geometryA.target_position_km, geometryB.target_position_km, t),
+      secondary_position_km: lerpPoint(geometryA.secondary_position_km, geometryB.secondary_position_km, t),
+      closest_approach_km: lerpPoint(geometryA.closest_approach_km, geometryB.closest_approach_km, t),
+      target_orbit_km: lerpPath(geometryA.target_orbit_km, geometryB.target_orbit_km, t),
+      secondary_orbit_km: lerpPath(geometryA.secondary_orbit_km, geometryB.secondary_orbit_km, t),
+      relative_distance_km: lerp(geometryA.relative_distance_km, geometryB.relative_distance_km, t),
+      display_relative_scale: lerp(geometryA.display_relative_scale, geometryB.display_relative_scale, t),
+      display_relative_distance_km: lerp(geometryA.display_relative_distance_km, geometryB.display_relative_distance_km, t),
+    },
+  };
+}
+
+function stopAnimation() {
+  if (state.animationFrame) {
+    cancelAnimationFrame(state.animationFrame);
+    state.animationFrame = null;
+  }
 }
 
 function ensureSceneEntities() {
@@ -306,44 +366,102 @@ function updateEntityGeometry(snapshot) {
   viewer.scene.requestRender();
 }
 
-function renderScene(fly = false) {
-  const event = currentEvent();
-  const snapshot = currentSnapshot();
-
+function renderSnapshot(snapshot, track = false) {
+  state.displaySnapshot = snapshot;
   updateEntityGeometry(snapshot);
-  renderMetrics(event, snapshot);
+  renderMetrics(currentEvent(), snapshot);
 
-  if (fly) focusEvent();
+  if (track && trackToggle.checked) {
+    centerCameraOnSnapshot(snapshot, false);
+  }
+}
+
+function renderScene(fly = false) {
+  stopAnimation();
+  const snapshot = currentSnapshot();
+  renderSnapshot(snapshot, false);
+
+  if (fly || trackToggle.checked) {
+    centerCameraOnSnapshot(snapshot, fly);
+  }
+}
+
+function cameraRangeForSnapshot(snapshot) {
+  const geometry = snapshot.geometry;
+  const closest = kmToCartesian(geometry.closest_approach_km);
+  const target = kmToCartesian(geometry.target_position_km);
+  const secondary = kmToCartesian(geometry.secondary_position_km);
+  const separation = Cesium.Cartesian3.distance(target, secondary);
+  const orbitalRadius = Cesium.Cartesian3.magnitude(closest);
+  return Math.max(2_800_000, Math.min(18_000_000, orbitalRadius * 0.30 + separation * 5));
+}
+
+function centerCameraOnSnapshot(snapshot, animated = true) {
+  const closest = kmToCartesian(snapshot.geometry.closest_approach_km);
+  const range = cameraRangeForSnapshot(snapshot);
+  const offset = new Cesium.HeadingPitchRange(0.0, -0.42, range);
+
+  if (animated) {
+    viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(closest, 250_000), {
+      duration: 0.65,
+      offset,
+    });
+  } else {
+    viewer.camera.lookAt(closest, offset);
+  }
 }
 
 function focusEvent() {
-  const snapshot = currentSnapshot();
-  const geometry = snapshot.geometry;
-  const target = kmToCartesian(geometry.target_position_km);
-  const secondary = kmToCartesian(geometry.secondary_position_km);
-  const closest = kmToCartesian(geometry.closest_approach_km);
-  const separation = Cesium.Cartesian3.distance(target, secondary);
-  const orbitalRadius = Cesium.Cartesian3.magnitude(closest);
-  const range = Math.max(1_200_000, Math.min(12_000_000, orbitalRadius * 0.18 + separation * 4));
-  const sphere = new Cesium.BoundingSphere(closest, Math.max(150_000, separation));
+  trackToggle.checked = true;
+  centerCameraOnSnapshot(state.displaySnapshot || currentSnapshot(), true);
+}
 
-  viewer.camera.flyToBoundingSphere(sphere, {
-    duration: 0.85,
-    offset: new Cesium.HeadingPitchRange(0.0, -0.65, range),
-  });
+function transitionToHorizon(index, options = {}) {
+  const targetIndex = Number(index);
+  const event = currentEvent();
+  const from = state.displaySnapshot || currentSnapshot();
+  const to = event.snapshots[targetIndex];
+  const smooth = smoothToggle.checked && options.smooth !== false;
+
+  stopAnimation();
+  state.horizonIndex = targetIndex;
+  horizonSelect.value = String(targetIndex);
+
+  if (!smooth) {
+    renderSnapshot(to, true);
+    return;
+  }
+
+  const startTime = performance.now();
+
+  function frame(now) {
+    const raw = Math.min(1, (now - startTime) / INTERPOLATION_MS);
+    const eased = easeInOut(raw);
+    const snapshot = interpolatedSnapshot(from, to, eased);
+    renderSnapshot(snapshot, true);
+
+    if (raw < 1) {
+      state.animationFrame = requestAnimationFrame(frame);
+    } else {
+      state.animationFrame = null;
+      renderSnapshot(to, true);
+    }
+  }
+
+  state.animationFrame = requestAnimationFrame(frame);
 }
 
 function setEvent(index) {
+  stopAnimation();
   state.eventIndex = Number(index);
   state.horizonIndex = 0;
+  state.displaySnapshot = currentSnapshot();
   populateHorizonSelect();
   renderScene(true);
 }
 
-function setHorizon(index, fly = false) {
-  state.horizonIndex = Number(index);
-  horizonSelect.value = String(state.horizonIndex);
-  renderScene(fly);
+function setHorizon(index) {
+  transitionToHorizon(index, { smooth: smoothToggle.checked });
 }
 
 function togglePlay() {
@@ -354,12 +472,14 @@ function togglePlay() {
     return;
   }
 
+  trackToggle.checked = true;
   playButton.textContent = "Pause";
+
   state.playTimer = setInterval(() => {
     const event = currentEvent();
     const next = (state.horizonIndex + 1) % event.snapshots.length;
-    setHorizon(next, false);
-  }, 1300);
+    transitionToHorizon(next, { smooth: smoothToggle.checked });
+  }, smoothToggle.checked ? 1250 : 900);
 }
 
 async function loadData() {
@@ -381,10 +501,19 @@ loadData().then((data) => {
 
   ensureSceneEntities();
   populateControls();
+  state.displaySnapshot = currentSnapshot();
   renderScene(true);
 });
 
 eventSelect.addEventListener("change", (event) => setEvent(event.target.value));
-horizonSelect.addEventListener("change", (event) => setHorizon(event.target.value, false));
+horizonSelect.addEventListener("change", (event) => setHorizon(event.target.value));
 playButton.addEventListener("click", togglePlay);
 homeButton.addEventListener("click", focusEvent);
+trackToggle.addEventListener("change", () => {
+  if (trackToggle.checked) {
+    centerCameraOnSnapshot(state.displaySnapshot || currentSnapshot(), true);
+  } else {
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+  }
+});
+smoothToggle.addEventListener("change", () => stopAnimation());
