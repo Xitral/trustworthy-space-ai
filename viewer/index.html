@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BEACON Orbit Viewer</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.123.0/Build/Cesium/Widgets/widgets.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <aside id="panel">
+    <p class="eyebrow">BEACON Orbit Viewer</p>
+    <h1>Conjunction Triage Visualization</h1>
+    <p class="note">Interactive CesiumJS viewer for representative satellite close-approach events exported from the BEACON pipeline.</p>
+    <label for="eventSelect">Event</label>
+    <select id="eventSelect"></select>
+    <label for="horizonSelect">Prediction horizon</label>
+    <select id="horizonSelect"></select>
+    <div class="button-row">
+      <button id="playButton" type="button">Play horizons</button>
+      <button id="homeButton" type="button">Focus event</button>
+    </div>
+    <section class="metrics" id="metrics"></section>
+    <section class="legend">
+      <h2>Legend</h2>
+      <div><span class="swatch target"></span>Target object path</div>
+      <div><span class="swatch secondary"></span>Secondary object path</div>
+      <div><span class="swatch separation"></span>Displayed separation</div>
+      <p class="note">Small separations may be visually scaled for Earth-scale viewing. The original relative distance is preserved.</p>
+    </section>
+    <section class="metadata" id="metadata"></section>
+  </aside>
+  <script src="https://cdn.jsdelivr.net/npm/cesium@1.123.0/Build/Cesium/Cesium.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
