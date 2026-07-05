@@ -1,6 +1,6 @@
 # BEACON
 
-[![CI](https://github.com/Xitral/trustworthy-space-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/Xitral/trustworthy-space-ai/actions/workflows/ci.yml)
+[![CI](https://github.com/Xitral/beacon-space-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/Xitral/beacon-space-ai/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-research%20prototype-orange)
@@ -244,7 +244,7 @@ A GitHub Actions workflow runs the same tests on push and pull request.
 ## Repository Structure
 
 ```text
-trustworthy-space-ai/
+beacon-space-ai/
   README.md
   CHANGELOG.md
   CITATION.cff
