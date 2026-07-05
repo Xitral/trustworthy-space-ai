@@ -2,7 +2,7 @@
 
 ## Title
 
-**BEACON: Bayesian Event Assessment for Conjunction Observation and Notification**
+## BEACON: Bayesian Event Assessment for Conjunction Observation and Notification
 
 BEACON studies calibrated, uncertainty-aware machine learning for satellite conjunction triage using public conjunction data message data.
 
@@ -52,7 +52,7 @@ The preprocessing pipeline also writes `results/horizon_post_tca_diagnostics.csv
 BEACON evaluates:
 
 | Horizon | Definition |
-|---|---|
+| - | - |
 | `early` | earliest available pre-TCA CDM per event |
 | `3d` | closest available pre-TCA CDM at least 3 days before TCA |
 | `2d` | closest available pre-TCA CDM at least 2 days before TCA |
