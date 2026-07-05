@@ -25,6 +25,9 @@ def make_synthetic_event_frame(n_events: int = 40) -> pd.DataFrame:
                     "requested_horizon_days": 1.0,
                     "meets_requested_horizon": True,
                     "is_horizon_fallback": False,
+                    "event_has_pre_tca_row": True,
+                    "selected_row_is_post_tca": False,
+                    "final_row_is_post_tca": False,
                 }
             )
 
@@ -62,6 +65,9 @@ def test_feature_columns_exclude_label_and_horizon_metadata() -> None:
     assert "requested_horizon_days" not in feature_cols
     assert "meets_requested_horizon" not in feature_cols
     assert "is_horizon_fallback" not in feature_cols
+    assert "event_has_pre_tca_row" not in feature_cols
+    assert "selected_row_is_post_tca" not in feature_cols
+    assert "final_row_is_post_tca" not in feature_cols
 
 
 def test_top_k_metrics_use_fraction_of_all_test_rows() -> None:
