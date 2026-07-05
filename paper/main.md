@@ -40,7 +40,39 @@ BEACON is not intended to replace operational conjunction assessment systems. It
 
 **RQ7:** How much of the learned model's performance depends on the CDM-provided current `risk` feature?
 
-## 3. Data
+## 3. Related Work
+
+### 3.1 Space debris, conjunction assessment, and collision avoidance
+
+Spacecraft collision avoidance is motivated by the long-term growth of orbital traffic and debris. Kessler and Cour-Palais's classic debris-cascade work showed that collisions in dense orbital regions can generate additional debris and increase future collision risk [Kessler1978]. Modern conjunction assessment workflows therefore require operators to monitor close approaches, estimate risk under uncertainty, and decide which events deserve additional analysis or mitigation.
+
+BEACON does not attempt to model orbital dynamics directly or recommend avoidance maneuvers. Instead, it focuses on the machine-learning evaluation layer: given public conjunction data messages, can a model produce calibrated, uncertainty-aware triage signals while avoiding leakage and overclaiming?
+
+### 3.2 Machine learning for conjunction risk prediction
+
+The closest prior work is the ESA Spacecraft Collision Avoidance Challenge, which released a curated dataset of conjunction data messages and asked participants to predict final collision risk [Uriot2020]. That work established the dataset, competition framing, and the usefulness of machine learning for studying collision-risk evolution.
+
+BEACON builds on this direction but emphasizes a different set of research concerns. Rather than only asking whether a model can predict final risk, BEACON focuses on trustworthy evaluation: event-level splits, early-warning horizons, calibration, uncertainty-aware escalation, repeated split robustness, and current-risk feature ablation. This positions BEACON as a reproducible evaluation artifact rather than an operational collision-avoidance model.
+
+### 3.3 Probability calibration
+
+Calibration is central when model outputs may support decisions. Platt scaling introduced a practical method for mapping classifier scores to calibrated probabilities [Platt1999], and later work showed that supervised models can differ substantially in probability quality even when their ranking performance is strong [NiculescuMizil2005]. Guo et al. demonstrated that high-performing modern neural networks can be poorly calibrated and that simple post-hoc calibration can be effective [Guo2017].
+
+BEACON follows this line of work by treating probability quality as a separate evaluation target from ranking. It reports Brier score, Expected Calibration Error, reliability curves, and quantile-binned reliability curves, because rare-event probabilities are concentrated near zero and can be hard to interpret with ordinary linear bins.
+
+### 3.4 Uncertainty estimation and human review
+
+Bayesian and Bayesian-inspired methods are widely used to express model uncertainty. Gal and Ghahramani interpreted dropout as approximate Bayesian inference [Gal2016], while Kendall and Gal distinguished epistemic uncertainty from aleatoric uncertainty and argued that uncertainty estimates are important for decision-making in high-consequence prediction settings [KendallGal2017].
+
+BEACON includes a true Bayesian logistic regression baseline and a bootstrap gradient-boosting ensemble. The bootstrap ensemble is Bayesian-inspired rather than fully Bayesian, but it provides a practical predictive-disagreement signal. BEACON evaluates this uncertainty signal as a human-review escalation policy rather than as an automated decision rule.
+
+### 3.5 Rare-event evaluation
+
+Conjunction triage is highly imbalanced, with high-risk events forming a small fraction of the dataset. In such settings, accuracy can be misleading. Precision-recall analysis is often more informative than ROC analysis for imbalanced binary classification, because it focuses directly on performance for the rare positive class [Saito2015].
+
+BEACON therefore emphasizes PR-AUC, top-K precision and recall, and positive escalation rate. These metrics match the operational framing better than accuracy: the practical question is whether a limited review budget can capture the small number of events most likely to matter.
+
+## 4. Data
 
 The dataset consists of public conjunction data messages grouped by event. Each event contains one or more CDM observations before time of closest approach.
 
@@ -48,7 +80,7 @@ The high-risk label is defined using the final available pre-TCA event risk. A c
 
 The resulting task is highly imbalanced. In the repeated test splits used here, the mean positive rate is **0.6079%**, corresponding to about 12 high-risk events per test horizon. This makes accuracy a poor evaluation metric. A model that predicts every event as non-high-risk would achieve very high accuracy while being operationally useless.
 
-## 4. Horizon Construction
+## 5. Horizon Construction
 
 BEACON evaluates prediction snapshots at four warning horizons:
 
@@ -67,15 +99,15 @@ The original plan included a 7-day horizon, but the dataset did not contain vali
 
 Preprocessing prefers pre-TCA observations for all horizon snapshots and final label construction. If an event has no pre-TCA observations, the pipeline falls back to an available row and records the selected-row status in `results/horizon_post_tca_diagnostics.csv`. This makes post-TCA fallback behavior explicit rather than silently mixing it into the results.
 
-## 5. Methods
+## 6. Methods
 
-### 5.1 Event-level splitting
+### 6.1 Event-level splitting
 
 Train, validation, and test splits are performed by `event_id`, not by individual CDM row. This prevents observations from the same conjunction event from leaking across splits.
 
 This design rule is critical because each event may have multiple CDM observations. If rows from the same event appeared in both training and test sets, the model could appear to perform well by recognizing event-specific information rather than learning generalizable risk structure.
 
-### 5.2 Baselines and learned models
+### 6.2 Baselines and learned models
 
 The study compares four baseline approaches:
 
@@ -90,7 +122,7 @@ Learned models are allowed to use the current CDM `risk` feature along with the 
 
 Final-risk label metadata, including `final_risk` and `final_time_to_tca`, is excluded from model features to avoid label leakage.
 
-### 5.3 Current-risk feature ablation
+### 6.3 Current-risk feature ablation
 
 To make the role of the CDM `risk` feature explicit, BEACON includes a current-risk feature ablation. The ablation compares three policies across the same repeated event-level splits:
 
@@ -100,7 +132,7 @@ To make the role of the CDM `risk` feature explicit, BEACON includes a current-r
 
 This experiment separates two claims. First, it tests whether a learned model can improve over simply sorting by the current risk estimate. Second, it tests whether non-risk CDM/context features contain useful signal when the current risk estimate is unavailable to the learned model.
 
-### 5.4 Calibration
+### 6.4 Calibration
 
 Gradient boosting probabilities are calibrated using sigmoid calibration on the validation split. Calibration is evaluated on held-out test events using:
 
@@ -111,7 +143,7 @@ Gradient boosting probabilities are calibrated using sigmoid calibration on the 
 
 Calibration is important because a model can rank events well while still producing probabilities that are poorly aligned with observed event frequencies.
 
-### 5.5 Bayesian and Bayesian-inspired uncertainty estimation
+### 6.5 Bayesian and Bayesian-inspired uncertainty estimation
 
 BEACON includes a Laplace-approximated Bayesian logistic regression baseline. This model uses a Gaussian prior, Bernoulli likelihood, MAP estimation, and a local Gaussian posterior approximation. It provides a true Bayesian probabilistic baseline, although it is not the strongest ranking model in the current experiments.
 
@@ -124,13 +156,13 @@ The predictive standard deviation is used as an uncertainty score. Events with t
 
 The bootstrap ensemble is called **Bayesian-inspired** rather than fully Bayesian because it does not explicitly define priors, likelihoods, or posterior inference over the gradient boosting model. Instead, it approximates uncertainty by measuring disagreement across models trained on plausible resampled versions of the data.
 
-### 5.6 Repeated split robustness
+### 6.6 Repeated split robustness
 
 Because high-risk conjunctions are rare, a single fixed test split can be sensitive to which high-risk events appear in the test set. To reduce this risk, BEACON repeats the event-level train/validation/test split across 20 random seeds and reports mean and standard deviation for ranking, calibration, top-K recall, escalation metrics, and risk ablation metrics.
 
 This robustness check changes the interpretation of the results. Rather than relying on a single split, BEACON asks whether the main trends persist across many leakage-safe event-level splits.
 
-## 6. Metrics
+## 7. Metrics
 
 The primary metrics are:
 
@@ -148,9 +180,9 @@ Accuracy is not emphasized because the positive class is extremely rare.
 
 For rare-event triage, the most important operational question is not whether the model predicts every event correctly. The more important question is whether it helps prioritize the small number of events most deserving of attention.
 
-## 7. Results
+## 8. Results
 
-### 7.1 Rare-event ranking
+### 8.1 Rare-event ranking
 
 Across 20 repeated event-level splits, learned models improve PR-AUC over the current-risk baseline at every evaluated horizon.
 
@@ -167,7 +199,7 @@ Across 20 repeated event-level splits, learned models improve PR-AUC over the cu
 
 The current-risk baseline remains strong, which is expected. The CDM risk estimate is already a meaningful domain signal. However, the repeated split results show that learned models add ranking value beyond direct current-risk ranking, especially at 1-day, 2-day, and 3-day horizons.
 
-### 7.2 Top-K triage
+### 8.2 Top-K triage
 
 Top-K recall measures how many high-risk events are captured when reviewing only the highest-ranked events. This is especially relevant for operational triage, where human attention is limited.
 
@@ -177,7 +209,7 @@ Top-K recall measures how many high-risk events are captured when reviewing only
 
 Repeated split top-K results are strong. At the top 5% review level, the bootstrap ensemble captures approximately 97.1% of high-risk events at 1 day, 94.6% at 2 days, 95.0% at 3 days, and 71.3% at the early horizon. This supports the framing of conjunction assessment as a ranking and prioritization problem rather than a standard classification problem.
 
-### 7.3 Probability calibration
+### 8.3 Probability calibration
 
 Sigmoid calibration preserves ranking performance while improving probability quality. This is expected because calibration mostly adjusts the probability scale rather than changing the ordering of predictions.
 
@@ -195,7 +227,7 @@ The 1-day reliability comparison shows how the current-risk baseline, raw gradie
 
 ![Quantile-binned reliability comparison at 1 day](../figures/quantile_reliability_comparison_1d.png)
 
-### 7.4 Uncertainty-aware escalation
+### 8.4 Uncertainty-aware escalation
 
 Bootstrap ensemble uncertainty is strongly concentrated on high-risk events. High-risk events have much larger predictive standard deviation than non-high-risk events.
 
@@ -222,7 +254,7 @@ The coverage tradeoff shows how many high-risk events are escalated as the autom
 
 These results should not be interpreted as showing that uncertainty replaces current risk. Current-risk escalation remains an extremely strong baseline, especially near TCA. Instead, the repeated split results support a more careful claim: uncertainty is a complementary human-review signal that performs far above random escalation and remains competitive with current-risk escalation.
 
-### 7.5 Current-risk feature ablation
+### 8.5 Current-risk feature ablation
 
 The current-risk feature ablation clarifies the source of the learned model's ranking gains. Gradient boosting with the current `risk` feature outperforms direct current-risk ranking in PR-AUC at every horizon. Removing the current `risk` feature reduces gradient-boosting PR-AUC at every horizon, but the no-risk model still exceeds direct current-risk PR-AUC.
 
@@ -239,7 +271,7 @@ The current-risk feature ablation clarifies the source of the learned model's ra
 
 The ablation supports a nuanced interpretation. Current `risk` is an important signal: removing it consistently reduces gradient-boosting PR-AUC. However, the no-risk model still outperforms direct current-risk ranking in PR-AUC, suggesting that additional CDM/context features contain independent ranking signal. At the same time, direct current-risk ranking remains very competitive for top-K recall, especially near TCA. Therefore, the strongest claim is not that machine learning replaces current risk. The stronger and more defensible claim is that learned models can combine current risk with additional features to improve rare-event ranking, while current risk remains a central and operationally meaningful signal.
 
-### 7.6 Repeated split robustness summary
+### 8.6 Repeated split robustness summary
 
 The repeated split analysis strengthens the evidence compared with a single held-out split. The positive class remains small, with about 12 high-risk events per test horizon, but the main qualitative results persist across 20 event-level splits:
 
@@ -249,7 +281,7 @@ The repeated split analysis strengthens the evidence compared with a single held
 4. current-risk escalation remains a strong, realistic comparator,
 5. and risk ablation shows that current risk is central but not the only predictive signal.
 
-## 8. Discussion
+## 9. Discussion
 
 The results suggest that calibrated and uncertainty-aware machine learning can support rare-event triage in satellite conjunction assessment.
 
@@ -267,7 +299,7 @@ Fourth, current-risk escalation remains extremely strong. This is not a weakness
 
 Fifth, the risk ablation shows that the current CDM `risk` feature is central to learned-model performance but does not fully explain the learned model's PR-AUC gains. The no-risk model still exceeds direct current-risk PR-AUC, while the with-risk model performs best. This supports an additive-feature interpretation rather than a replacement-of-risk interpretation.
 
-## 9. Limitations
+## 10. Limitations
 
 This project is a research prototype only.
 
@@ -286,7 +318,7 @@ Key limitations include:
 
 Because each test horizon contains only a small number of high-risk events, strong-looking recall results should still be interpreted cautiously. Repeating the evaluation across 20 event-level splits reduces single-split sensitivity, but it does not replace external validation on independent conjunction assessment data.
 
-## 10. Conclusion
+## 11. Conclusion
 
 BEACON demonstrates a reproducible framework for evaluating trustworthy AI in satellite conjunction triage.
 
@@ -302,3 +334,23 @@ Future work should add:
 - and evaluation on additional conjunction datasets.
 
 BEACON is not an operational collision-avoidance system. It is a research artifact showing how trustworthy machine learning methods can be evaluated for high-consequence space-domain decision support.
+
+## References
+
+[Kessler1978] Donald J. Kessler and Burton G. Cour-Palais. Collision Frequency of Artificial Satellites: The Creation of a Debris Belt. *Journal of Geophysical Research*, 1978.
+
+[Uriot2020] Thomas Uriot, Dario Izzo, Luís F. Simões, Rasit Abay, Nils Einecke, Sven Rebhan, Jose Martinez-Heras, Francesca Letizia, Jan Siminski, and Klaus Merz. Spacecraft Collision Avoidance Challenge: Design and Results of a Machine Learning Competition. arXiv:2008.03069, 2020.
+
+[Brier1950] Glenn W. Brier. Verification of Forecasts Expressed in Terms of Probability. *Monthly Weather Review*, 1950.
+
+[Platt1999] John C. Platt. Probabilistic Outputs for Support Vector Machines and Comparisons to Regularized Likelihood Methods. *Advances in Large Margin Classifiers*, 1999.
+
+[NiculescuMizil2005] Alexandru Niculescu-Mizil and Rich Caruana. Predicting Good Probabilities with Supervised Learning. *Proceedings of the International Conference on Machine Learning*, 2005.
+
+[Guo2017] Chuan Guo, Geoff Pleiss, Yu Sun, and Kilian Q. Weinberger. On Calibration of Modern Neural Networks. *Proceedings of the International Conference on Machine Learning*, 2017.
+
+[Gal2016] Yarin Gal and Zoubin Ghahramani. Dropout as a Bayesian Approximation: Representing Model Uncertainty in Deep Learning. *Proceedings of the International Conference on Machine Learning*, 2016.
+
+[Kendall2017] Alex Kendall and Yarin Gal. What Uncertainties Do We Need in Bayesian Deep Learning for Computer Vision? *Advances in Neural Information Processing Systems*, 2017.
+
+[Saito2015] Takaya Saito and Marc Rehmsmeier. The Precision-Recall Plot Is More Informative than the ROC Plot When Evaluating Binary Classifiers on Imbalanced Datasets. *PLOS ONE*, 2015.
