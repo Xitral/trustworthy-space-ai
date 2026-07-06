@@ -34,14 +34,46 @@ body,
   left: 18px;
   z-index: 10;
   width: min(390px, calc(100vw - 36px));
-  max-height: calc(100vh - 36px);
+  height: calc(100vh - 36px);
+  max-height: none;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 18px;
   border: 1px solid var(--panel-border);
   border-radius: 18px;
   background: var(--panel-bg);
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(12px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 166, 255, 0.58) rgba(8, 15, 28, 0.20);
+}
+
+#panel::-webkit-scrollbar {
+  width: 10px;
+}
+
+#panel::-webkit-scrollbar-button {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+#panel::-webkit-scrollbar-track {
+  margin: 14px 0;
+  border-radius: 999px;
+  background: rgba(8, 15, 28, 0.28);
+}
+
+#panel::-webkit-scrollbar-thumb {
+  min-height: 56px;
+  border: 2px solid rgba(8, 12, 20, 0.88);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(120, 166, 255, 0.82), rgba(87, 165, 255, 0.38));
+}
+
+#panel::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(145, 187, 255, 0.98), rgba(87, 165, 255, 0.58));
 }
 
 .eyebrow {
@@ -168,6 +200,10 @@ button:hover {
 }
 
 .metric {
+  min-height: 86px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   border: 1px solid rgba(164, 190, 255, 0.18);
   border-radius: 12px;
   padding: 10px;
@@ -183,7 +219,8 @@ button:hover {
 
 .metric .value {
   display: block;
-  margin-top: 3px;
+  margin-top: auto;
+  line-height: 1.15;
   font-size: 1.05rem;
   font-weight: 750;
 }
@@ -195,6 +232,7 @@ button:hover {
 }
 
 .metric.wide {
+  min-height: 70px;
   grid-column: 1 / -1;
 }
 
@@ -235,6 +273,7 @@ button:hover {
     right: 10px;
     top: 10px;
     width: auto;
-    max-height: 48vh;
+    height: 48vh;
+    max-height: none;
   }
 }
