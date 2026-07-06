@@ -23,8 +23,24 @@
   function currentSnapshotSafe() {
     try {
       return state?.displaySnapshot || currentSnapshot?.();
-    } catch (_error) {
+    } catch (error) {
       return null;
+    }
+  }
+
+  function stateSafe() {
+    try {
+      return typeof state !== "undefined" ? state : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function viewerSafe() {
+    try {
+      return typeof viewer !== "undefined" ? viewer : window.viewer;
+    } catch (error) {
+      return window.viewer || null;
     }
   }
 
@@ -33,17 +49,19 @@
   }
 
   window.runBeaconViewerSmokeTest = function runBeaconViewerSmokeTest() {
+    const viewerInstance = viewerSafe();
+    const stateObject = stateSafe();
     const snapshot = currentSnapshotSafe();
     const geometry = snapshot?.geometry || {};
-    const data = state?.data || {};
+    const data = stateObject?.data || {};
     const events = Array.isArray(data.events) ? data.events : [];
     const scripts = Array.from(document.scripts).map((script) => script.getAttribute("src") || "");
 
     const results = [
       check("Cesium loaded", Boolean(window.Cesium?.Viewer)),
-      check("Viewer created", Boolean(window.viewer || typeof viewer !== "undefined")),
+      check("Viewer created", Boolean(viewerInstance)),
       check("Preserve drawing buffer configured", window.__BEACON_PRESERVE_DRAWING_BUFFER_CONFIGURED__ === true),
-      check("Viewer export flag set", Boolean(viewer?.__BEACON_PRESERVE_DRAWING_BUFFER__)),
+      check("Viewer export flag set", Boolean(viewerInstance?.__BEACON_PRESERVE_DRAWING_BUFFER__)),
       check("Research runtime loaded", window.__BEACON_RESEARCH_RUNTIME__ === true),
       check("Research consistency loaded", window.__BEACON_RESEARCH_CONSISTENCY__ === true),
       check("Event selector exists", exists("#eventSelect")),
@@ -60,7 +78,7 @@
       check("JSON export button exists", exists("#beaconJsonButton")),
       check("HTML export button exists", exists("#beaconBriefButton")),
       check("Figure mode button exists", exists("#beaconFigureModeButton")),
-      check("No old hotfix scripts loaded", !scripts.some((src) => src.includes("hotfix"))),
+      check("No removed patch scripts loaded", !scripts.some((src) => src.includes("hotfix"))),
       check("Data payload has events", events.length > 0, `events=${events.length}`),
       check("Current snapshot exists", Boolean(snapshot)),
       check("Snapshot has horizon", Boolean(snapshot?.horizon), String(snapshot?.horizon || "")),
