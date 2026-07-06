@@ -3,6 +3,7 @@
 // disturbing the research overlays.
 (function patchResearchHotfixes() {
   const MAP_IMAGE_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Equirectangular_projection_SW.jpg/640px-Equirectangular_projection_SW.jpg";
+  let scrubberTrackingWired = false;
 
   function injectHotfixCss() {
     if (document.getElementById("researchHotfixStyles")) return;
@@ -93,6 +94,38 @@
     ctx.restore();
   }
 
+  function trackDisplayedSnapshot() {
+    if (!trackToggle?.checked || !state.displaySnapshot) return;
+    centerCameraOnSnapshot(state.displaySnapshot);
+  }
+
+  function wireScrubberTracking() {
+    if (scrubberTrackingWired) return;
+    const scrubber = document.getElementById("researchScrubber");
+    if (!scrubber) return;
+    scrubberTrackingWired = true;
+
+    scrubber.addEventListener("pointerdown", () => {
+      window.__BEACON_RESEARCH_SCRUBBING__ = true;
+    });
+    scrubber.addEventListener("input", () => {
+      window.__BEACON_RESEARCH_SCRUBBING__ = true;
+      requestAnimationFrame(trackDisplayedSnapshot);
+    });
+    scrubber.addEventListener("change", () => {
+      requestAnimationFrame(trackDisplayedSnapshot);
+    });
+    scrubber.addEventListener("pointerup", () => {
+      requestAnimationFrame(() => {
+        trackDisplayedSnapshot();
+        window.__BEACON_RESEARCH_SCRUBBING__ = false;
+      });
+    });
+    scrubber.addEventListener("pointercancel", () => {
+      window.__BEACON_RESEARCH_SCRUBBING__ = false;
+    });
+  }
+
   if (typeof renderSnapshot === "function") {
     const previousRenderSnapshot = renderSnapshot;
     renderSnapshot = function hotfixedRenderSnapshot(snapshot, track = false) {
@@ -119,7 +152,9 @@
   function frame() {
     injectHotfixCss();
     ensureMapWrapper();
+    wireScrubberTracking();
     redrawMapOverlay();
+    if (window.__BEACON_RESEARCH_SCRUBBING__) trackDisplayedSnapshot();
     requestAnimationFrame(frame);
   }
 
