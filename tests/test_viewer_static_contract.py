@@ -8,10 +8,34 @@ VIEWER_DIR = REPO_ROOT / "viewer"
 def test_viewer_loads_named_runtime_modules() -> None:
     html = (VIEWER_DIR / "index.html").read_text(encoding="utf-8")
 
+    assert '<script src="export_config.js"></script>' in html
     assert '<script src="app.js"></script>' in html
     assert '<script src="live_trails.js"></script>' in html
     assert '<script src="research_runtime.js"></script>' in html
     assert '<script src="research_consistency.js"></script>' in html
+    assert '<script src="viewer_smoke_test.js"></script>' in html
+    assert html.index('src="export_config.js"') < html.index('src="app.js"')
+
+
+def test_export_config_preserves_webgl_drawing_buffer() -> None:
+    config = (VIEWER_DIR / "export_config.js").read_text(encoding="utf-8")
+
+    assert "preserveDrawingBuffer: true" in config
+    assert "__BEACON_PRESERVE_DRAWING_BUFFER_CONFIGURED__" in config
+    assert "__BEACON_PRESERVE_DRAWING_BUFFER__" in config
+
+
+def test_viewer_smoke_test_checks_export_and_guardrail_contracts() -> None:
+    smoke = (VIEWER_DIR / "viewer_smoke_test.js").read_text(encoding="utf-8")
+
+    assert "runBeaconViewerSmokeTest" in smoke
+    assert "Preserve drawing buffer configured" in smoke
+    assert "Research runtime loaded" in smoke
+    assert "Research consistency loaded" in smoke
+    assert "One canonical export card" in smoke
+    assert "No old hotfix scripts loaded" in smoke
+    assert "Original distance preserved" in smoke
+    assert "Research-only warning visible" in smoke
 
 
 def test_research_runtime_has_one_canonical_export_area() -> None:
