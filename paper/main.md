@@ -4,7 +4,7 @@
 
 Satellite conjunction assessment is a rare-event decision-support problem in which operators must prioritize a small number of potentially high-risk events from a much larger set of routine conjunction warnings. This work introduces **BEACON**, a reproducible study of calibrated, uncertainty-aware machine learning for satellite conjunction triage using public conjunction data message data.
 
-BEACON evaluates event-level risk prediction across early, 3-day, 2-day, and 1-day warning horizons using leakage-safe event splits. The study compares learned models against a direct current-risk baseline, evaluates probability calibration, tests whether bootstrap ensemble uncertainty can identify events that should be escalated for human review, and ablates the CDM-provided current `risk` feature.
+BEACON evaluates event-level risk prediction across early, 3-day, 2-day, and 1-day warning horizons using leakage-safe event splits. The study compares learned models against a direct current-risk baseline, evaluates probability calibration, tests whether bootstrap ensemble uncertainty can identify events that should be escalated for human review, ablates the CDM-provided current `risk` feature, and presents an interactive 3D visual analytics viewer for research-only model-grounded triage inspection.
 
 Across 20 repeated event-level train/validation/test splits, learned gradient boosting models improve rare-event ranking over direct current-risk ranking at every evaluated horizon. The strongest repeated-split PR-AUC values are 0.806 at 1 day, 0.630 at 2 days, 0.493 at 3 days, and 0.233 at the early horizon, compared with current-risk baseline PR-AUC values of 0.581, 0.367, 0.237, and 0.109 respectively. A current-risk feature ablation shows that removing the current `risk` feature reduces gradient-boosting PR-AUC at every horizon, but the no-risk model still exceeds direct current-risk PR-AUC. At the 10% escalation level, bootstrap uncertainty captures 97.5% of high-risk events at 1 day, 96.3% at 2 days, 97.5% at 3 days, and 80.8% at the early horizon, far above random escalation. Current-risk escalation remains a very strong comparator, so uncertainty is best interpreted as a complementary human-review signal rather than a replacement for domain risk estimates.
 
@@ -12,7 +12,7 @@ Across 20 repeated event-level train/validation/test splits, learned gradient bo
 
 Satellite operators face an increasingly congested orbital environment. Collision avoidance decisions are high-consequence, time-sensitive, and uncertainty-heavy. Because truly high-risk conjunctions are rare, the task is not simply classification. It is rare-event triage.
 
-A useful decision-support system should do more than maximize accuracy. It should rank risky events effectively, produce probabilities that are reasonably calibrated, and communicate uncertainty so that ambiguous cases can be escalated for human review.
+A useful decision-support system should do more than maximize accuracy. It should rank risky events effectively, produce probabilities that are reasonably calibrated, communicate uncertainty so that ambiguous cases can be escalated for human review, and expose enough context for a human analyst to inspect why a case is being prioritized.
 
 This project studies whether lightweight machine learning models can support conjunction assessment by improving:
 
@@ -20,9 +20,10 @@ This project studies whether lightweight machine learning models can support con
 2. probability calibration,
 3. uncertainty-aware escalation,
 4. robustness across repeated event-level splits,
-5. and transparent interpretation of how much performance depends on the current CDM risk estimate.
+5. transparent interpretation of how much performance depends on the current CDM risk estimate,
+6. and interactive visual analysis of model-grounded conjunction triage cases.
 
-BEACON is not intended to replace operational conjunction assessment systems. It is a research prototype for evaluating how machine learning should be tested when applied to space-safety decision support.
+BEACON is not intended to replace operational conjunction assessment systems. It is a research prototype for evaluating how machine learning should be tested and communicated when applied to space-safety decision support.
 
 ## 2. Research Questions
 
@@ -40,6 +41,8 @@ BEACON is not intended to replace operational conjunction assessment systems. It
 
 **RQ7:** How much of the learned model's performance depends on the CDM-provided current `risk` feature?
 
+**RQ8:** Can an interactive visual analytics interface help inspect model-grounded triage outputs while making uncertainty, display scaling, and non-operational constraints explicit?
+
 ## 3. Related Work
 
 ### 3.1 Space debris, conjunction assessment, and collision avoidance
@@ -52,7 +55,7 @@ BEACON does not attempt to model orbital dynamics directly or recommend avoidanc
 
 The closest prior work is the ESA Spacecraft Collision Avoidance Challenge, which released a curated dataset of conjunction data messages and asked participants to predict final collision risk [Uriot2020]. That work established the dataset, competition framing, and the usefulness of machine learning for studying collision-risk evolution.
 
-BEACON builds on this direction but emphasizes a different set of research concerns. Rather than only asking whether a model can predict final risk, BEACON focuses on trustworthy evaluation: event-level splits, early-warning horizons, calibration, uncertainty-aware escalation, repeated split robustness, and current-risk feature ablation. This positions BEACON as a reproducible evaluation artifact rather than an operational collision-avoidance model.
+BEACON builds on this direction but emphasizes a different set of research concerns. Rather than only asking whether a model can predict final risk, BEACON focuses on trustworthy evaluation: event-level splits, early-warning horizons, calibration, uncertainty-aware escalation, repeated split robustness, current-risk feature ablation, and research-only visual analytics. This positions BEACON as a reproducible evaluation and inspection artifact rather than an operational collision-avoidance model.
 
 ### 3.3 Probability calibration
 
@@ -161,6 +164,23 @@ The bootstrap ensemble is called **Bayesian-inspired** rather than fully Bayesia
 Because high-risk conjunctions are rare, a single fixed test split can be sensitive to which high-risk events appear in the test set. To reduce this risk, BEACON repeats the event-level train/validation/test split across 20 random seeds and reports mean and standard deviation for ranking, calibration, top-K recall, escalation metrics, and risk ablation metrics.
 
 This robustness check changes the interpretation of the results. Rather than relying on a single split, BEACON asks whether the main trends persist across many leakage-safe event-level splits.
+
+### 6.7 Interactive visual analytics viewer
+
+BEACON includes an interactive 3D visual analytics viewer that turns the model outputs into inspectable research cases. The viewer is not an operational propagator. It is a human-AI triage interface for examining how risk, model probability, predictive uncertainty, event geometry, and selected prediction horizon interact for representative conjunction events.
+
+The viewer exports and loads `viewer/data/conjunction_events.json`, which contains the selected events, horizon snapshots, model probability, predictive standard deviation, current and final risk, and the best available display geometry. When absolute target and secondary position columns are available, the viewer uses them directly. When absolute positions are unavailable, it falls back to relative-state, miss-distance, or deterministic reference-orbit approximations and exposes the geometry mode in the UI and exported JSON.
+
+The viewer adds several research controls: event selection, horizon scrubbing, play-through of horizon evolution, camera tracking, target/secondary path overlays, displayed separation, uncertainty proxy volumes, a research-validity guardrail panel, and screenshot/JSON/HTML export modes. These controls support a repeatable demo path: select a high-priority event, scrub across warning horizons, inspect how uncertainty changes, and export a research snapshot.
+
+Because the model exports probability-space predictive standard deviation rather than orbital covariance, uncertainty volumes are explicitly framed as visual proxies. The current visualization maps predictive uncertainty and forecast horizon into a comparative envelope:
+
+```text
+sigma_proxy_km = 100 + 1800 * predictive_std + 45 * time_to_tca_days
+95_percent_visual_envelope_km = 1.96 * sigma_proxy_km
+```
+
+This mapping is intended for visual comparison and human review, not covariance estimation. The viewer also preserves the original `relative_distance_km` when small separations are display-scaled for visibility. A validity watermark and guardrail panel indicate whether the viewer is using exported data or sample/fallback data, the current geometry mode, the display scale, and the research-only constraint.
 
 ## 7. Metrics
 
@@ -279,15 +299,16 @@ The repeated split analysis strengthens the evidence compared with a single held
 2. top-K recall remains high for learned models,
 3. uncertainty escalation greatly outperforms random escalation,
 4. current-risk escalation remains a strong, realistic comparator,
-5. and risk ablation shows that current risk is central but not the only predictive signal.
+5. risk ablation shows that current risk is central but not the only predictive signal,
+6. and the viewer provides a research-only interface for inspecting these outputs without hiding geometry or uncertainty caveats.
 
 ## 9. Discussion
 
 The results suggest that calibrated and uncertainty-aware machine learning can support rare-event triage in satellite conjunction assessment.
 
-The strongest use case is not replacing operational systems. Instead, BEACON is best understood as a decision-support framework for prioritizing which events deserve closer human review.
+The strongest use case is not replacing operational systems. Instead, BEACON is best understood as a decision-support research framework for prioritizing which events deserve closer human review and for inspecting those priorities through an uncertainty-aware visual analytics interface.
 
-Five findings are especially important.
+Six findings are especially important.
 
 First, the task is extremely imbalanced, with high-risk events representing less than 1% of events. This makes accuracy an inappropriate primary metric. PR-AUC, top-K recall, calibration, uncertainty-aware escalation, risk ablation, and repeated split robustness are more meaningful.
 
@@ -298,6 +319,8 @@ Third, uncertainty-based escalation captures most high-risk events by reviewing 
 Fourth, current-risk escalation remains extremely strong. This is not a weakness of BEACON. It is an important result: domain risk estimates already contain substantial signal, and learned uncertainty should be used to complement, not replace, domain-informed risk ranking.
 
 Fifth, the risk ablation shows that the current CDM `risk` feature is central to learned-model performance but does not fully explain the learned model's PR-AUC gains. The no-risk model still exceeds direct current-risk PR-AUC, while the with-risk model performs best. This supports an additive-feature interpretation rather than a replacement-of-risk interpretation.
+
+Sixth, the visual analytics viewer changes the artifact from a pure benchmark into an inspectable research system. The viewer makes event selection, horizon evolution, uncertainty, display scaling, data provenance, and non-operational constraints visible instead of leaving them implicit in tables.
 
 ## 10. Limitations
 
@@ -314,7 +337,10 @@ Key limitations include:
 - Learned models include the current CDM risk feature, so results should be interpreted as improvement over direct current-risk ranking, not as risk-free prediction.
 - Risk ablation reduces ambiguity about the current-risk feature, but it does not prove that the learned feature relationships would generalize to other datasets.
 - Events without pre-TCA observations require fallback handling and are tracked through diagnostics.
-- The figures and metrics should be interpreted as preliminary evidence, not deployment-ready validation.
+- Viewer geometry can use relative-state, miss-distance, or deterministic reference-orbit approximations when absolute positions are unavailable.
+- Uncertainty volumes are probability-space visual proxies, not orbital covariance ellipsoids.
+- Small separations may be visually scaled for interpretability, although original relative distance is preserved in the exported data.
+- The figures, viewer exports, and metrics should be interpreted as preliminary evidence, not deployment-ready validation.
 
 Because each test horizon contains only a small number of high-risk events, strong-looking recall results should still be interpreted cautiously. Repeating the evaluation across 20 event-level splits reduces single-split sensitivity, but it does not replace external validation on independent conjunction assessment data.
 
@@ -322,7 +348,7 @@ Because each test horizon contains only a small number of high-risk events, stro
 
 BEACON demonstrates a reproducible framework for evaluating trustworthy AI in satellite conjunction triage.
 
-The project shows that rare-event ranking, calibration, uncertainty-aware escalation, risk-feature ablation, and repeated split robustness provide a more appropriate evaluation lens than accuracy alone. Learned models improve prioritization over direct current-risk ranking across 20 repeated event-level splits. The risk ablation shows that current risk is a central signal, but additional CDM/context features still contain ranking value. Bootstrap ensemble uncertainty identifies many high-risk events for human review and greatly outperforms random escalation, while remaining complementary to strong current-risk escalation.
+The project shows that rare-event ranking, calibration, uncertainty-aware escalation, risk-feature ablation, repeated split robustness, and interactive visual analytics provide a more appropriate evaluation lens than accuracy alone. Learned models improve prioritization over direct current-risk ranking across 20 repeated event-level splits. The risk ablation shows that current risk is a central signal, but additional CDM/context features still contain ranking value. Bootstrap ensemble uncertainty identifies many high-risk events for human review and greatly outperforms random escalation, while remaining complementary to strong current-risk escalation. The viewer makes the resulting triage cases inspectable through a research-only interface that exposes horizon evolution, uncertainty proxies, display scaling, and data-validity guardrails.
 
 Future work should add:
 
@@ -331,13 +357,15 @@ Future work should add:
 - operationally informed escalation policies,
 - true Bayesian nonlinear models,
 - richer uncertainty decomposition,
+- quantitative user studies of visual triage workflows,
+- physically grounded covariance visualization when covariance/state information is available,
 - and evaluation on additional conjunction datasets.
 
-BEACON is not an operational collision-avoidance system. It is a research artifact showing how trustworthy machine learning methods can be evaluated for high-consequence space-domain decision support.
+BEACON is not an operational collision-avoidance system. It is a research artifact showing how trustworthy machine learning methods and uncertainty-aware visual analytics can be evaluated for high-consequence space-domain decision support.
 
 ## Artifact Availability
 
-Code, manuscript source, figures, tests, and reproduction scripts for the archived BEACON v0.2.2 research artifact are available through Zenodo at DOI `10.5281/zenodo.21209794` and through the associated GitHub repository. Raw ESA challenge data is not redistributed in the repository and must be obtained according to the original dataset provider's terms.
+Code, manuscript source, figures, tests, viewer source, and reproduction scripts for the archived BEACON v0.2.2 research artifact are available through Zenodo at DOI `10.5281/zenodo.21209794` and through the associated GitHub repository. Raw ESA challenge data is not redistributed in the repository and must be obtained according to the original dataset provider's terms.
 
 ## References
 
