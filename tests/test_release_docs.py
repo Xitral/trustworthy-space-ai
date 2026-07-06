@@ -20,7 +20,7 @@ def test_reproducibility_guide_documents_core_release_commands() -> None:
     assert "not physical covariance ellipsoids" in text
 
 
-def test_release_validation_record_blocks_final_release_until_local_checks_are_filled() -> None:
+def test_release_validation_record_states_candidate_validation_status() -> None:
     text = read("docs/release_validation_v0.3.0.md")
 
     assert "Release candidate: v0.3.0-rc1" in text
@@ -28,16 +28,16 @@ def test_release_validation_record_blocks_final_release_until_local_checks_are_f
     assert "Decision: pending" in text
     assert "python -m pytest -q" in text
     assert "runBeaconViewerSmokeTest()" in text
-    assert "Confirm `CITATION.cff` still points to the current archived DOI" in text
+    assert "CITATION.cff` aligned with the current archived DOI status" in text
 
 
-def test_release_notes_define_claims_and_claims_to_avoid() -> None:
+def test_release_notes_define_research_framing_and_unsupported_claims() -> None:
     text = read("docs/release_notes_v0.3.0.md")
 
     assert "Status: release candidate draft" in text
     assert "BEACON remains a research prototype" in text
-    assert "Research claims to preserve" in text
-    assert "Claims to avoid" in text
+    assert "Research framing" in text
+    assert "Unsupported claims" in text
     assert "physical covariance ellipsoids" in text
 
 
@@ -58,4 +58,4 @@ def test_readme_marks_release_candidate_without_replacing_archived_doi() -> None
     assert "v0.3.0-rc1" in text
     assert "Archived version: v0.2.2" in text
     assert "10.5281/zenodo.21209794" in text
-    assert "The v0.3.0 release candidate is not a final archived DOI release" in text
+    assert "does not yet have a final Zenodo version DOI" in text
