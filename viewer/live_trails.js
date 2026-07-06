@@ -2,7 +2,7 @@
   const HEAD = 0.96;
   const TAIL = 0.018;
   const FUTURE = 0.025;
-  const LABEL_EASE = 0.16;
+  const LABEL_EASE = 0.075;
   const originalRenderSnapshot = renderSnapshot;
   const originalRenderMetrics = renderMetrics;
   const originalApplyLabelFade = applyLabelFade;
@@ -160,8 +160,12 @@
   function syncSeparation(snapshot) {
     const g = snapshot?.geometry;
     if (!g || !state.refs.separation) return;
-    state.refs.separation.polyline.positions = new Cesium.ConstantProperty([kmToCartesian(g.target_position_km), kmToCartesian(g.secondary_position_km)]);
-    state.refs.separation.polyline.material = new Cesium.ColorMaterialProperty(SEPARATION_COLOR);
+    const positions = [kmToCartesian(g.target_position_km), kmToCartesian(g.secondary_position_km)];
+    state.refs.separation.show = true;
+    state.refs.separation.polyline.positions = new Cesium.ConstantProperty(positions);
+    state.refs.separation.polyline.width = 2.4;
+    state.refs.separation.polyline.material = new Cesium.ColorMaterialProperty(SEPARATION_COLOR.withAlpha(0.46));
+    state.refs.separation.polyline.depthFailMaterial = new Cesium.ColorMaterialProperty(SEPARATION_COLOR.withAlpha(0.22));
   }
 
   function syncAll(snapshot) {
@@ -181,12 +185,15 @@
     const style = document.createElement("style");
     style.id = "researchFeatureStyles";
     style.textContent = `
-      #researchDock{position:fixed;right:18px;top:18px;width:350px;max-height:calc(100vh - 138px);overflow:auto;z-index:60;color:#eef6ff;font-family:Inter,system-ui,sans-serif;pointer-events:auto}
+      #panel,#researchDock{scrollbar-width:thin;scrollbar-color:rgba(120,166,255,.50) rgba(8,15,28,.30)}
+      #panel::-webkit-scrollbar,#researchDock::-webkit-scrollbar{width:10px}#panel::-webkit-scrollbar-track,#researchDock::-webkit-scrollbar-track{background:rgba(8,15,28,.32);border-radius:999px;margin:14px 0}#panel::-webkit-scrollbar-thumb,#researchDock::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(120,166,255,.72),rgba(87,165,255,.32));border:2px solid rgba(8,15,28,.72);border-radius:999px}#panel::-webkit-scrollbar-thumb:hover,#researchDock::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,rgba(120,166,255,.94),rgba(87,165,255,.52))}
+      .metrics .metric{min-height:86px;display:flex;flex-direction:column;align-items:flex-start}.metrics .metric .value{margin-top:auto;line-height:1.15}.metrics .metric.wide{min-height:70px}
+      #researchDock{position:fixed;right:18px;top:72px;width:350px;max-height:calc(100vh - 96px);overflow:auto;z-index:60;color:#eef6ff;font-family:Inter,system-ui,sans-serif;pointer-events:auto;padding-right:4px}
       #researchDock .card{background:rgba(8,15,28,.82);border:1px solid rgba(126,177,255,.24);box-shadow:0 18px 50px rgba(0,0,0,.30);backdrop-filter:blur(14px);border-radius:16px;padding:12px 14px;margin-bottom:10px}
       #researchDock h3{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#9ec6ff;margin:0 0 8px}
       #researchDock p,#researchDock li{font-size:12px;line-height:1.35;color:#cfe1ff;margin:4px 0}.research-muted{color:#7f93b7!important}.research-value{font-weight:700;color:#fff}.research-row{display:flex;justify-content:space-between;gap:8px;margin:5px 0}.research-small{font-size:11px;color:#9fb4d7}.research-event{display:block;width:100%;text-align:left;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);color:#eaf3ff;border-radius:10px;padding:7px;margin:5px 0;cursor:pointer}.research-event:hover{background:rgba(87,165,255,.16)}
-      #researchTimeline{position:fixed;left:620px;right:390px;bottom:20px;z-index:61;background:rgba(8,15,28,.82);border:1px solid rgba(126,177,255,.24);border-radius:16px;padding:12px 16px;color:#eef6ff;backdrop-filter:blur(14px);font-family:Inter,system-ui,sans-serif}#researchTimeline input{width:100%}#groundTrack{width:100%;height:140px;border-radius:10px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.08)}.research-slider{width:100%}.research-brief{width:100%;border:0;border-radius:10px;padding:8px;background:#57a5ff;color:#07101f;font-weight:800;cursor:pointer}.research-feature-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.research-feature{font-size:11px;padding:6px;border-radius:9px;background:rgba(87,165,255,.10);border:1px solid rgba(87,165,255,.16)}
-      @media(max-width:1300px){#researchDock{width:310px;right:12px}#researchTimeline{left:590px;right:335px}}
+      #researchTimeline{position:fixed;left:620px;right:390px;bottom:22px;z-index:61;background:rgba(8,15,28,.82);border:1px solid rgba(126,177,255,.24);border-radius:16px;padding:12px 16px;color:#eef6ff;backdrop-filter:blur(14px);font-family:Inter,system-ui,sans-serif}#researchTimeline input{width:100%}#groundTrack{width:100%;height:148px;border-radius:10px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.08)}.research-slider{width:100%}.research-brief{width:100%;border:0;border-radius:10px;padding:8px;background:#57a5ff;color:#07101f;font-weight:800;cursor:pointer}.research-feature-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.research-feature{font-size:11px;padding:6px;border-radius:9px;background:rgba(87,165,255,.10);border:1px solid rgba(87,165,255,.16)}
+      @media(max-width:1300px){#researchDock{width:310px;right:12px;top:72px}#researchTimeline{left:590px;right:335px}}
       @media(max-width:1050px){#researchDock{display:none}#researchTimeline{left:24px;right:24px}}`;
     document.head.appendChild(style);
   }
@@ -202,7 +209,7 @@
       <div class="card"><h3>Model-Grounded Triage</h3><div id="triageSummary"></div><p class="research-muted">Research-only classification for explainable conjunction-risk triage. Not an operational maneuver recommendation.</p></div>
       <div class="card"><h3>What Changed?</h3><div id="changePanel"></div></div>
       <div class="card"><h3>Threshold Sensitivity</h3><label class="research-small">Risk log10 cutoff <span id="riskCutLabel"></span></label><input id="riskCut" class="research-slider" type="range" min="-8" max="-3" step="0.1" value="-5.5"><label class="research-small">Uncertainty cutoff <span id="uncCutLabel"></span></label><input id="uncCut" class="research-slider" type="range" min="0" max="0.3" step="0.01" value="0.10"><label class="research-small">Confidence cutoff <span id="confCutLabel"></span></label><input id="confCut" class="research-slider" type="range" min="0" max="1" step="0.05" value="0.50"><div id="sensitivityOut"></div></div>
-      <div class="card"><h3>Ground-Track Mini Map</h3><canvas id="groundTrack" width="316" height="140"></canvas></div>
+      <div class="card"><h3>Ground-Track Mini Map</h3><canvas id="groundTrack" width="316" height="148"></canvas></div>
       <div class="card"><h3>Exportable Research Brief</h3><button id="briefButton" class="research-brief">Export Research Brief</button></div>`;
     document.body.appendChild(dock);
     const timeline = document.createElement("div");
@@ -297,23 +304,43 @@
     sensitivity.innerHTML = `<p class="research-small">Current threshold result: <b>${stateName}</b></p>`;
   }
 
+  function drawEarthMap(ctx, w, h) {
+    const ocean = ctx.createLinearGradient(0, 0, 0, h);
+    ocean.addColorStop(0, "#102a52");
+    ocean.addColorStop(0.55, "#0b3f7b");
+    ocean.addColorStop(1, "#071b35");
+    ctx.fillStyle = ocean;
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = "rgba(190,220,255,.16)";
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 6; i += 1) { ctx.beginPath(); ctx.moveTo((w / 6) * i, 0); ctx.lineTo((w / 6) * i, h); ctx.stroke(); }
+    for (let i = 1; i < 4; i += 1) { ctx.beginPath(); ctx.moveTo(0, (h / 4) * i); ctx.lineTo(w, (h / 4) * i); ctx.stroke(); }
+    const land = "rgba(93,150,112,.80)";
+    const edge = "rgba(200,235,210,.35)";
+    function poly(points) { ctx.beginPath(); points.forEach(([x, y], i) => { const px = x * w, py = y * h; if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.closePath(); ctx.fillStyle = land; ctx.fill(); ctx.strokeStyle = edge; ctx.stroke(); }
+    poly([[.12,.32],[.20,.22],[.30,.28],[.28,.43],[.20,.52],[.13,.45]]);
+    poly([[.25,.55],[.33,.57],[.36,.73],[.30,.88],[.24,.75]]);
+    poly([[.45,.31],[.55,.24],[.64,.29],[.62,.40],[.51,.41],[.44,.36]]);
+    poly([[.52,.43],[.62,.45],[.66,.60],[.60,.80],[.51,.66]]);
+    poly([[.62,.30],[.78,.24],[.90,.33],[.86,.48],[.73,.50],[.63,.42]]);
+    poly([[.77,.62],[.88,.65],[.90,.76],[.80,.79]]);
+    ctx.fillStyle = "rgba(255,255,255,.18)";
+    ctx.beginPath(); ctx.ellipse(w * .53, h * .18, w * .08, h * .025, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(w * .15, h * .83, w * .16, h * .025, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
   function drawGroundTrack(snapshot) {
     const canvas = document.getElementById("groundTrack");
     if (!canvas || !snapshot?.geometry) return;
     const ctx = canvas.getContext("2d");
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "rgba(5,12,25,.92)";
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = "rgba(126,177,255,.18)";
-    ctx.lineWidth = 1;
-    for (let i = 1; i < 6; i += 1) { ctx.beginPath(); ctx.moveTo((w / 6) * i, 0); ctx.lineTo((w / 6) * i, h); ctx.stroke(); }
-    for (let i = 1; i < 4; i += 1) { ctx.beginPath(); ctx.moveTo(0, (h / 4) * i); ctx.lineTo(w, (h / 4) * i); ctx.stroke(); }
+    drawEarthMap(ctx, w, h);
     function project(p) { const r = Math.sqrt(p[0] ** 2 + p[1] ** 2 + p[2] ** 2) || 1; const lon = Math.atan2(p[1], p[0]); const lat = Math.asin(clamp(p[2] / r, -1, 1)); return [w * (lon + Math.PI) / (2 * Math.PI), h * (0.5 - lat / Math.PI)]; }
-    function path(points, color) { ctx.strokeStyle = color; ctx.beginPath(); points.forEach((p, i) => { const q = project(p); if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); }); ctx.stroke(); }
-    path(snapshot.geometry.target_orbit_km || [], "rgba(87,165,255,.75)");
-    path(snapshot.geometry.secondary_orbit_km || [], "rgba(255,184,77,.75)");
-    for (const [p, color] of [[snapshot.geometry.target_position_km, "#57a5ff"], [snapshot.geometry.secondary_position_km, "#ffb84d"]]) { const q = project(p); ctx.fillStyle = color; ctx.beginPath(); ctx.arc(q[0], q[1], 4, 0, Math.PI * 2); ctx.fill(); }
+    function path(points, color) { ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath(); points.forEach((p, i) => { const q = project(p); if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); }); ctx.stroke(); }
+    path(snapshot.geometry.target_orbit_km || [], "rgba(87,165,255,.88)");
+    path(snapshot.geometry.secondary_orbit_km || [], "rgba(255,184,77,.88)");
+    for (const [p, color] of [[snapshot.geometry.target_position_km, "#57a5ff"], [snapshot.geometry.secondary_position_km, "#ffb84d"]]) { const q = project(p); ctx.fillStyle = color; ctx.beginPath(); ctx.arc(q[0], q[1], 4.5, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "white"; ctx.lineWidth = 1.3; ctx.stroke(); }
   }
 
   function updateTimeline(snapshot) {
