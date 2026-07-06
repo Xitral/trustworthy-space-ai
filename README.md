@@ -5,7 +5,7 @@
 [![Version DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21209794.svg)](https://doi.org/10.5281/zenodo.21209794)
 [![Concept DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21209119.svg)](https://doi.org/10.5281/zenodo.21209119)
 ![Python](https://img.shields.io/badge/python-3.10-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+![License](https://img.shields.io/badge/license-Apache--2.0-green)
 ![Status](https://img.shields.io/badge/status-research%20prototype-orange)
 ![Release Candidate](https://img.shields.io/badge/release%20candidate-v0.3.0--rc1-purple)
 
@@ -28,6 +28,14 @@ Repository: https://github.com/Xitral/beacon-space-ai
 ```
 
 Use the version DOI to cite the exact v0.2.2 artifact used for reproducibility. Use the concept DOI to cite the overall BEACON archive across versions. If you use BEACON, also cite the original public dataset provider. The v0.3.0 release candidate is not a final archived DOI release until a new Zenodo version DOI is minted.
+
+## License
+
+BEACON source code on the current `main` branch is released under the Apache License 2.0. See [LICENSE](LICENSE) for details.
+
+Licensing note: BEACON versions prior to `v0.3.0-rc1`, including the archived `v0.2.2` Zenodo version DOI listed above, were released under the MIT License. Beginning with `v0.3.0-rc1` and future releases, BEACON source code is released under the Apache License 2.0.
+
+Documentation, figures, research materials, and demo scenarios are licensed under CC BY 4.0 unless otherwise noted. BEACON names, logos, and brand assets are not open-licensed unless explicitly marked.
 
 ## What BEACON Studies
 
