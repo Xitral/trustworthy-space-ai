@@ -11,12 +11,14 @@ from train_models import (
 
 
 def test_make_event_splits_has_no_event_leakage() -> None:
+    n_events = 80
+    horizons = ["early", "3d", "2d", "1d"]
     df = pd.DataFrame(
         {
-            "event_id": [str(i) for i in range(40) for _ in range(4)],
-            "horizon": ["early", "3d", "2d", "1d"] * 40,
-            "high_risk": [1 if i % 10 == 0 else 0 for i in range(40) for _ in range(4)],
-            "risk": np.linspace(-8.0, -3.0, 160),
+            "event_id": [str(i) for i in range(n_events) for _ in horizons],
+            "horizon": horizons * n_events,
+            "high_risk": [1 if i % 5 == 0 else 0 for i in range(n_events) for _ in horizons],
+            "risk": np.linspace(-8.0, -3.0, n_events * len(horizons)),
         }
     )
 
