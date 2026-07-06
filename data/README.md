@@ -19,13 +19,15 @@ data/raw/train_data.csv
 data/raw/train_data.zip
 ```
 
-The file must contain at least these columns:
+The training file must contain at least these columns:
 
 ```text
 event_id
 time_to_tca
 risk
 ```
+
+A raw test file is optional. If a `.csv` or `.zip` file whose name contains `test` is present, `src/inspect_data.py` will inspect it and write train/test column-comparison summaries. If it is absent, inspection continues with the training file only.
 
 The current pipeline was developed against a raw training table with 162,634 rows and 103 columns. After grouping by `event_id`, the processed event-level dataset contains 13,154 unique events.
 
