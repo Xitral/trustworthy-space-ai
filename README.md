@@ -7,24 +7,27 @@
 ![Python](https://img.shields.io/badge/python-3.10-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-research%20prototype-orange)
-![Release](https://img.shields.io/badge/release-v0.2.2-purple)
+![Release Candidate](https://img.shields.io/badge/release%20candidate-v0.3.0--rc1-purple)
 
 **BEACON (Bayesian Event Assessment for Conjunction Observation and Notification)** is a reproducible research project for calibrated, uncertainty-aware satellite conjunction triage using public CDM data.
 
 BEACON is a research prototype only. It is not an operational collision-avoidance or space-safety system.
 
+**Current release candidate:** `v0.3.0-rc1`. Complete `docs/release_validation_v0.3.0.md` before publishing a final v0.3.0 archive or updating `CITATION.cff` to a new Zenodo version DOI.
+
 ## Citation and Archived Release
 
-The manuscript-ready BEACON research artifact is archived on Zenodo:
+The current archived BEACON research artifact is v0.2.2 on Zenodo:
 
 ```text
 Version DOI: 10.5281/zenodo.21209794
 Concept DOI: 10.5281/zenodo.21209119
-Version: v0.2.2
+Archived version: v0.2.2
+Current release candidate: v0.3.0-rc1
 Repository: https://github.com/Xitral/beacon-space-ai
 ```
 
-Use the version DOI to cite the exact v0.2.2 artifact used for reproducibility. Use the concept DOI to cite the overall BEACON archive across versions. If you use BEACON, also cite the original public dataset provider.
+Use the version DOI to cite the exact v0.2.2 artifact used for reproducibility. Use the concept DOI to cite the overall BEACON archive across versions. If you use BEACON, also cite the original public dataset provider. The v0.3.0 release candidate is not a final archived DOI release until a new Zenodo version DOI is minted.
 
 ## What BEACON Studies
 
@@ -36,7 +39,7 @@ BEACON evaluates whether lightweight machine learning can support rare-event con
 - repeated event-level split robustness
 - current-risk feature ablation
 - leakage-safe evaluation design
-- 3D conjunction visualization for interpretability
+- interactive 3D visual analytics for model-grounded triage inspection
 
 ## Research Questions
 
@@ -53,6 +56,8 @@ BEACON evaluates whether lightweight machine learning can support rare-event con
 **RQ6:** Are the main findings stable across repeated event-level train/validation/test splits?
 
 **RQ7:** How much of the learned model's performance depends on the CDM-provided current `risk` feature?
+
+**RQ8:** Can an interactive visual analytics interface help inspect model-grounded triage outputs while making uncertainty, display scaling, and non-operational constraints explicit?
 
 ## Key Design Rules
 
@@ -115,6 +120,14 @@ At the top 10% human-review escalation level, uncertainty-based escalation captu
 | `early` | 80.8% +/- 9.8% | 84.6% +/- 7.8% | 8.3% +/- 6.6% |
 
 The strongest interpretation is not that machine learning replaces current risk. The stronger and more defensible claim is that learned models can combine current risk with additional CDM/context features to improve rare-event ranking, while uncertainty can help identify events that deserve human review.
+
+## Reproducibility and Release Candidate Docs
+
+- `REPRODUCIBILITY.md` defines the environment, commands, expected outputs, expected metric ranges, viewer checks, paper build steps, and caveats.
+- `docs/release_validation_v0.3.0.md` is the validation record to complete before publishing v0.3.0.
+- `docs/release_notes_v0.3.0.md` contains draft release notes.
+- `docs/reviewer_summary_v0.3.0.md` provides a short reviewer-facing summary.
+- `docs/viewer_demo_checklist.md` provides manual viewer QA and export validation steps.
 
 ## Reproducing the Pipeline
 
@@ -227,4 +240,12 @@ beacon-space-ai/
   LICENSE
   .gitignore
   requirements.txt
+  REPRODUCIBILITY.md
+  data/
+  docs/
+  figures/
+  paper/
+  src/
+  tests/
+  viewer/
 ```
