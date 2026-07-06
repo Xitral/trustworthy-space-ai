@@ -1,8 +1,8 @@
 # BEACON v0.3.0 Release Validation Record
 
-This file is the release-candidate validation record for the v0.3.0 research artifact.
+This file records the release-candidate validation status for the v0.3.0 research artifact.
 
-Do not publish a new GitHub release, Zenodo archive, or public announcement until the unchecked items are completed and the local outputs are pasted or summarized here.
+Pending fields indicate validation evidence that has not yet been recorded for the candidate archive.
 
 ## Release candidate
 
@@ -26,21 +26,21 @@ Commit SHA: TBD
 - Added viewer export reliability configuration and browser smoke-test helper.
 - Added reproducibility and viewer demo/checklist documentation.
 
-## Required validation checklist
+## Validation checklist
 
-- [ ] Pull latest `main`.
-- [ ] Install dependencies from `requirements.txt`.
-- [ ] Run `python -m pytest -q`.
-- [ ] Run `python src/run_all.py` with full release settings.
-- [ ] Confirm `viewer/data/conjunction_events.json` is regenerated.
-- [ ] Build the LaTeX paper.
-- [ ] Serve the viewer locally.
-- [ ] Run `runBeaconViewerSmokeTest()` in the browser console.
-- [ ] Export PNG and confirm it is not blank.
-- [ ] Export JSON and confirm it contains `export_type`, `event_id`, `horizon`, `uncertainty_visualization`, and `snapshot`.
-- [ ] Export Research HTML and confirm it opens locally.
-- [ ] Review `README.md`, `REPRODUCIBILITY.md`, `CHANGELOG.md`, `paper/main.md`, and `paper/main.tex` for release consistency.
-- [ ] Confirm `CITATION.cff` still points to the current archived DOI until a new Zenodo DOI is minted.
+- [ ] Latest `main` branch checked out.
+- [ ] Dependencies installed from `requirements.txt`.
+- [ ] `python -m pytest -q` completed.
+- [ ] `python src/run_all.py` completed with full release settings.
+- [ ] `viewer/data/conjunction_events.json` regenerated.
+- [ ] LaTeX paper built.
+- [ ] Viewer served locally.
+- [ ] `runBeaconViewerSmokeTest()` completed in the browser console.
+- [ ] PNG export checked and not blank.
+- [ ] JSON export checked for `export_type`, `event_id`, `horizon`, `uncertainty_visualization`, and `snapshot`.
+- [ ] Research HTML export checked locally.
+- [ ] `README.md`, `REPRODUCIBILITY.md`, `CHANGELOG.md`, `paper/main.md`, and `paper/main.tex` reviewed for release consistency.
+- [ ] `CITATION.cff` aligned with the current archived DOI status.
 
 ## Local commands
 
@@ -84,7 +84,7 @@ runBeaconViewerSmokeTest()
 
 ## Test result
 
-Paste or summarize the local output here:
+Recorded local output:
 
 ```text
 TBD
@@ -98,13 +98,13 @@ all tests passed
 
 ## Full pipeline result
 
-Paste or summarize the local output here:
+Recorded local output:
 
 ```text
 TBD
 ```
 
-Expected core output summary should include:
+Expected core output summary:
 
 ```text
 data/processed/event_labels.csv
@@ -117,7 +117,7 @@ viewer/data/conjunction_events.json
 
 ## Paper build result
 
-Paste or summarize the local output here:
+Recorded local output:
 
 ```text
 TBD
@@ -131,7 +131,7 @@ paper/main.pdf created successfully
 
 ## Viewer smoke-test result
 
-Paste or summarize the browser console result here:
+Recorded browser console result:
 
 ```text
 TBD
@@ -159,10 +159,10 @@ JSON contains the research snapshot fields.
 Research HTML opens locally and includes the research-only warning.
 ```
 
-## Known caveats to keep in release notes
+## Known caveats retained for release notes
 
 - BEACON is a research prototype only.
-- It is not an operational orbit propagator, collision-avoidance system, or maneuver recommendation system.
+- It is not an operational orbit propagator or operational decision system.
 - Raw data is not redistributed.
 - Results depend on public challenge data and have not been externally operationally validated.
 - High-risk events are rare, so results must be interpreted with repeated-split uncertainty.
@@ -174,10 +174,10 @@ Research HTML opens locally and includes the research-only warning.
 
 ```text
 Decision: pending
-Reason: waiting on local validation outputs
+Reason: local validation outputs are not yet recorded
 ```
 
-When all validation is complete, update this section to either:
+Final release decisions are recorded as either:
 
 ```text
 Decision: approve v0.3.0 release
