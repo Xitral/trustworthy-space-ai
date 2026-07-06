@@ -167,7 +167,7 @@ BEACON includes a CesiumJS viewer for representative conjunction events. The vie
 
 The viewer is for interpretation and communication only. It is not an operational orbit propagator or collision-avoidance system.
 
-The viewer also includes research-validity guardrails for uncertainty proxies, display-scaled separations, fallback/sample data, and export-mode screenshots. See `docs/research_viewer_failure_points.md` for the current viewer risk register and mitigation notes.
+The viewer also includes research-validity guardrails for uncertainty proxies, display-scaled separations, fallback/sample data, and export-mode screenshots. See `docs/research_viewer_failure_points.md` for the current viewer risk register and mitigation notes, and `docs/viewer_demo_checklist.md` for the manual demo/export QA path.
 
 Generate viewer data:
 
@@ -187,6 +187,14 @@ Then open:
 ```text
 http://localhost:8000
 ```
+
+Hard refresh, then run the browser smoke test from DevTools Console:
+
+```javascript
+runBeaconViewerSmokeTest()
+```
+
+The viewer's `Screenshot / Export Mode` card can export PNG, JSON, and HTML research snapshots. PNG export is configured with WebGL drawing-buffer preservation through `viewer/export_config.js`; the smoke test verifies that configuration before you rely on exported screenshots.
 
 ## Paper
 
